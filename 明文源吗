@@ -17,7 +17,7 @@ let preferredIPsURL = '';
 
 // 协议选择配置
 let enableVless = true;
-let enableTrojan = false;
+let enableTrojan = true;  // 默认启用 Trojan
 
 // KV存储相关变量
 let kvStore = null;
@@ -2457,13 +2457,18 @@ async function parseTrojanHeader(buffer, uuidToken) {
     const portIndex = addressIndex + addressLength;
     const portBuffer = socks5DataBuffer.slice(portIndex, portIndex + 2);
     const portRemote = new DataView(portBuffer).getUint16(0);
+    
+    // Trojan 协议格式：端口后面还有 CRLF (2 bytes)，然后才是 Payload
+    // portIndex + 0~2: 端口
+    // portIndex + 2~4: CRLF
+    // portIndex + 4: Payload 开始
     return {
         hasError: false,
         addressRemote: address,
         addressType: atype,
         port: portRemote,
         hostname: address,
-        rawClientData: socks5DataBuffer.slice(portIndex + 2)
+        rawClientData: socks5DataBuffer.slice(portIndex + 4)
     };
 }
 
