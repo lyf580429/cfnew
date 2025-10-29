@@ -1273,9 +1273,15 @@ async function handleWsRequest(request) {
                 // 尝试 Trojan 协议
                 if (enableTrojan && chunk.byteLength >= 56) {
                     const trojanResult = await parseTrojanHeader(chunk, authToken);
+                    console.log('Trojan 解析结果:', { 
+                        hasError: trojanResult.hasError, 
+                        message: trojanResult.message,
+                        chunkSize: chunk.byteLength 
+                    });
                     if (!trojanResult.hasError) {
                         protocolType = 'trojan';
                         const { addressType, port, hostname, rawClientData } = trojanResult;
+                        console.log(`Trojan 连接: ${hostname}:${port}`);
                         await forwardTCP(addressType, hostname, port, rawClientData, serverSock, null, remoteConnWrapper);
                         return;
                     }
@@ -2376,7 +2382,7 @@ async function parseTrojanHeader(buffer, uuidToken) {
     if (buffer.byteLength < 56) {
         return {
             hasError: true,
-            message: "invalid trojan data"
+            message: "invalid trojan data - too short"
         };
     }
     let crLfIndex = 56;
@@ -2387,6 +2393,11 @@ async function parseTrojanHeader(buffer, uuidToken) {
         };
     }
     const password = new TextDecoder().decode(buffer.slice(0, crLfIndex));
+    console.log('Trojan 密码验证:', {
+        received: password.substring(0, 10) + '...',
+        expected: sha224Password.substring(0, 10) + '...',
+        match: password === sha224Password
+    });
     if (password !== sha224Password) {
         return {
             hasError: true,
