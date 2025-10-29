@@ -1111,8 +1111,8 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
     const links = [];
     const wsPath = encodeURIComponent('/');
     
-    // 将 UUID 转换为 SHA224 作为 Trojan 密码
-    const sha224Password = await sha224Hash(user);
+    // Trojan 客户端会自动对密码进行 SHA224，所以链接中直接使用 UUID
+    const password = user;
 
     list.forEach(item => {
         const nodeNameBase = item.isp.replace(/\s/g, '_');
@@ -1154,7 +1154,7 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
                     host: workerDomain, 
                     path: wsPath 
                 });
-                links.push(`trojan://${sha224Password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
+                links.push(`trojan://${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
             } else {
                 // 非TLS节点
                 const wsNodeName = `${nodeNameBase}-${port}-Trojan-WS`;
@@ -1164,7 +1164,7 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
                     host: workerDomain,
                     path: wsPath
                 });
-                links.push(`trojan://${sha224Password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
+                links.push(`trojan://${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
             }
         });
     });
@@ -2581,8 +2581,8 @@ async function generateTrojanLinksFromNewIPs(list, user, workerDomain) {
     const links = [];
     const wsPath = encodeURIComponent('/?ed=2048');
     
-    // 将 UUID 转换为 SHA224 作为 Trojan 密码
-    const sha224Password = await sha224Hash(user);
+    // Trojan 客户端会自动对密码进行 SHA224，所以链接中直接使用 UUID
+    const password = user;
     
     list.forEach(item => {
         const nodeName = item.name.replace(/\s/g, '_');
@@ -2591,19 +2591,19 @@ async function generateTrojanLinksFromNewIPs(list, user, workerDomain) {
         if (CF_HTTPS_PORTS.includes(port)) {
             // CF HTTPS端口，生成TLS节点
             const wsNodeName = `${nodeName}-${port}-Trojan-WS-TLS`;
-            const link = `trojan://${sha224Password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+            const link = `trojan://${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
         } else if (CF_HTTP_PORTS.includes(port)) {
             // CF HTTP端口，生成非TLS节点（除非启用了disableNonTLS）
             if (!disableNonTLS) {
                 const wsNodeName = `${nodeName}-${port}-Trojan-WS`;
-                const link = `trojan://${sha224Password}@${item.ip}:${port}?security=none&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+                const link = `trojan://${password}@${item.ip}:${port}?security=none&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
                 links.push(link);
             }
         } else {
             // 非CF标准端口，只生成TLS节点（HTTP会被CF拦截）
             const wsNodeName = `${nodeName}-${port}-Trojan-WS-TLS`;
-            const link = `trojan://${sha224Password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+            const link = `trojan://${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
         }
     });
