@@ -18,6 +18,7 @@ let preferredIPsURL = '';
 // 协议选择配置
 let enableVless = true;
 let enableTrojan = true;  // 默认启用 Trojan
+let enableXhttp = false;  // xhttp 协议（基于 HTTP POST 的 VLESS）
 let trojanPassword = '';  // Trojan 自定义密码，为空则使用 UUID
 
 // KV存储相关变量
@@ -419,8 +420,14 @@ export default {
 			// Trojan 密码配置
 			trojanPassword = getConfigValue('trojanPassword', env.trojanPassword || env.TROJANPASSWORD) || '';
 			
+			// xhttp 协议配置
+			const xhttpControl = getConfigValue('enableXhttp', env.enableXhttp || env.ENABLEXHTTP);
+			if (xhttpControl !== undefined && xhttpControl !== '') {
+				enableXhttp = xhttpControl === 'yes' || xhttpControl === true || xhttpControl === 'true';
+			}
+			
 			// 确保至少有一个协议启用
-			if (!enableVless && !enableTrojan) {
+			if (!enableVless && !enableTrojan && !enableXhttp) {
 				enableVless = true;
 			}
 
@@ -436,6 +443,24 @@ export default {
 			}
 
 			const url = new URL(request.url);
+
+			// xhttp POST 请求处理
+			if (request.method === 'POST' && enableXhttp) {
+				const r = await handleXhttpPost(request);
+				if (r) {
+					ctx.waitUntil(r.closed);
+					return new Response(r.readable, {
+						headers: {
+							'X-Accel-Buffering': 'no',
+							'Cache-Control': 'no-store',
+							Connection: 'keep-alive',
+							'User-Agent': 'Go-http-client/2.0',
+							'Content-Type': 'application/grpc',
+						},
+					});
+				}
+				return new Response('Internal Server Error', { status: 500 });
+			}
 
 			if (request.headers.get('Upgrade') === 'websocket') {
 				return await handleWsRequest(request);
@@ -888,6 +913,9 @@ async function handleSubscriptionRequest(request, user, url = null) {
         }
         if (enableTrojan) {
             finalLinks.push(...await generateTrojanLinksFromSource(list, user, workerDomain));
+        }
+        if (enableXhttp) {
+            finalLinks.push(...generateXhttpLinksFromSource(list, user, workerDomain));
         }
     }
 
@@ -1786,12 +1814,18 @@ async function handleSubscriptionPage(request, user = null) {
                                     <span style="font-size: 1.1rem;">启用 Trojan 协议</span>
                                 </label>
                             </div>
+                            <div style="margin-bottom: 10px;">
+                                <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
+                                    <input type="checkbox" id="enableXhttp" style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                    <span style="font-size: 1.1rem;">启用 xhttp 协议</span>
+                                </label>
+                            </div>
                             <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0, 255, 0, 0.3);">
                                 <label style="display: block; margin-bottom: 8px; color: #00ff00; font-size: 0.95rem;">Trojan 密码 (可选):</label>
                                 <input type="text" id="trojanPassword" placeholder="留空则自动使用 UUID" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 13px;">
                                 <small style="color: #00aa00; font-size: 0.8rem; display: block; margin-top: 5px;">设置自定义 Trojan 密码。留空则使用 UUID。客户端会自动对密码进行 SHA224 哈希。</small>
                             </div>
-                            <small style="color: #00aa00; font-size: 0.85rem; display: block; margin-top: 10px;">可以同时启用两个协议，也可以只选择一个。订阅将生成选中协议的节点。</small>
+                            <small style="color: #00aa00; font-size: 0.85rem; display: block; margin-top: 10px;">可以同时启用多个协议。订阅将生成选中协议的节点。<br>• VLESS WS: 基于 WebSocket 的标准协议<br>• Trojan: 使用 SHA224 密码认证<br>• xhttp: 基于 HTTP POST 的伪装协议（需要绑定自定义域名并开启 gRPC）</small>
                         </div>
                     </div>
                     <div style="margin-bottom: 15px;">
@@ -2164,6 +2198,7 @@ async function handleSubscriptionPage(request, user = null) {
                 document.getElementById('wkRegion').value = config.wk || '';
                 document.getElementById('enableVless').checked = config.enableVless !== 'no';
                 document.getElementById('enableTrojan').checked = config.enableTrojan === 'yes' || config.enableTrojan !== 'no';
+                document.getElementById('enableXhttp').checked = config.enableXhttp === 'yes';
                 document.getElementById('trojanPassword').value = config.trojanPassword || '';
                 document.getElementById('customIP').value = config.p || '';
                 document.getElementById('preferredIPs').value = config.yx || '';
@@ -2345,6 +2380,7 @@ async function handleSubscriptionPage(request, user = null) {
                     const configData = {
                         enableVless: document.getElementById('enableVless').checked ? 'yes' : 'no',
                         enableTrojan: document.getElementById('enableTrojan').checked ? 'yes' : 'no',
+                        enableXhttp: document.getElementById('enableXhttp').checked ? 'yes' : 'no',
                         trojanPassword: document.getElementById('trojanPassword').value,
                         p: document.getElementById('customIP').value,
                         yx: document.getElementById('preferredIPs').value,
@@ -2353,7 +2389,9 @@ async function handleSubscriptionPage(request, user = null) {
                     };
                     
                     // 确保至少选择一个协议
-                    if (!document.getElementById('enableVless').checked && !document.getElementById('enableTrojan').checked) {
+                    if (!document.getElementById('enableVless').checked && 
+                        !document.getElementById('enableTrojan').checked && 
+                        !document.getElementById('enableXhttp').checked) {
                         alert('至少需要启用一个协议！');
                         return;
                     }
@@ -2593,6 +2631,430 @@ function rightRotate(value, amount) {
     return (value >>> amount) | (value << (32 - amount));
 }
 
+// ==================== xhttp 协议相关函数 ====================
+
+let ACTIVE_CONNECTIONS = 0;
+const XHTTP_BUFFER_SIZE = 128 * 1024;
+const CONNECT_TIMEOUT_MS = 5000;
+const IDLE_TIMEOUT_MS = 45000;
+const MAX_RETRIES = 2;
+const MAX_CONCURRENT = 32;
+
+function xhttp_sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+}
+
+function validate_uuid_xhttp(id, uuid) {
+    for (let index = 0; index < 16; index++) {
+        if (id[index] !== uuid[index]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+class XhttpCounter {
+    #total
+
+    constructor() {
+        this.#total = 0;
+    }
+
+    get() {
+        return this.#total;
+    }
+
+    add(size) {
+        this.#total += size;
+    }
+}
+
+function concat_typed_arrays(first, ...args) {
+    let len = first.length;
+    for (let a of args) {
+        len += a.length;
+    }
+    const r = new first.constructor(len);
+    r.set(first, 0);
+    len = first.length;
+    for (let a of args) {
+        r.set(a, len);
+        len += a.length;
+    }
+    return r;
+}
+
+function parse_uuid_xhttp(uuid) {
+    uuid = uuid.replaceAll('-', '');
+    const r = [];
+    for (let index = 0; index < 16; index++) {
+        const v = parseInt(uuid.substr(index * 2, 2), 16);
+        r.push(v);
+    }
+    return r;
+}
+
+function get_xhttp_buffer(size) {
+    return new Uint8Array(new ArrayBuffer(size || XHTTP_BUFFER_SIZE));
+}
+
+async function read_xhttp_header(readable, uuid_str) {
+    const reader = readable.getReader({ mode: 'byob' });
+
+    try {
+        let r = await reader.readAtLeast(1 + 16 + 1, get_xhttp_buffer());
+        let rlen = 0;
+        let idx = 0;
+        let cache = r.value;
+        rlen += r.value.length;
+
+        const version = cache[0];
+        const id = cache.slice(1, 1 + 16);
+        const uuid = parse_uuid_xhttp(uuid_str);
+        if (!validate_uuid_xhttp(id, uuid)) {
+            return `invalid UUID`;
+        }
+        const pb_len = cache[1 + 16];
+        const addr_plus1 = 1 + 16 + 1 + pb_len + 1 + 2 + 1;
+
+        if (addr_plus1 + 1 > rlen) {
+            if (r.done) {
+                return `header too short`;
+            }
+            idx = addr_plus1 + 1 - rlen;
+            r = await reader.readAtLeast(idx, get_xhttp_buffer());
+            rlen += r.value.length;
+            cache = concat_typed_arrays(cache, r.value);
+        }
+
+        const cmd = cache[1 + 16 + 1 + pb_len];
+        if (cmd !== 1) {
+            return `unsupported command: ${cmd}`;
+        }
+        const port = (cache[addr_plus1 - 1 - 2] << 8) + cache[addr_plus1 - 1 - 1];
+        const atype = cache[addr_plus1 - 1];
+        let header_len = -1;
+        if (atype === ADDRESS_TYPE_IPV4) {
+            header_len = addr_plus1 + 4;
+        } else if (atype === ADDRESS_TYPE_IPV6) {
+            header_len = addr_plus1 + 16;
+        } else if (atype === ADDRESS_TYPE_URL) {
+            header_len = addr_plus1 + 1 + cache[addr_plus1];
+        }
+
+        if (header_len < 0) {
+            return 'read address type failed';
+        }
+
+        idx = header_len - rlen;
+        if (idx > 0) {
+            if (r.done) {
+                return `read address failed`;
+            }
+            r = await reader.readAtLeast(idx, get_xhttp_buffer());
+            rlen += r.value.length;
+            cache = concat_typed_arrays(cache, r.value);
+        }
+
+        let hostname = '';
+        idx = addr_plus1;
+        switch (atype) {
+            case ADDRESS_TYPE_IPV4:
+                hostname = cache.slice(idx, idx + 4).join('.');
+                break;
+            case ADDRESS_TYPE_URL:
+                hostname = new TextDecoder().decode(
+                    cache.slice(idx + 1, idx + 1 + cache[idx]),
+                );
+                break;
+            case ADDRESS_TYPE_IPV6:
+                hostname = cache
+                    .slice(idx, idx + 16)
+                    .reduce(
+                        (s, b2, i2, a) =>
+                            i2 % 2
+                                ? s.concat(((a[i2 - 1] << 8) + b2).toString(16))
+                                : s,
+                        [],
+                    )
+                    .join(':');
+                break;
+        }
+
+        if (hostname.length < 1) {
+            return 'failed to parse hostname';
+        }
+
+        const data = cache.slice(header_len);
+        return {
+            hostname,
+            port,
+            data,
+            resp: new Uint8Array([version, 0]),
+            reader,
+            done: r.done,
+        };
+    } catch (error) {
+        try { reader.releaseLock(); } catch (_) {}
+        throw error;
+    }
+}
+
+async function upload_to_remote_xhttp(counter, writer, httpx) {
+    async function inner_upload(d) {
+        if (!d || d.length === 0) {
+            return;
+        }
+        counter.add(d.length);
+        try {
+            await writer.write(d);
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    try {
+        await inner_upload(httpx.data);
+        let chunkCount = 0;
+        while (!httpx.done) {
+            const r = await httpx.reader.read(get_xhttp_buffer());
+            if (r.done) break;
+            await inner_upload(r.value);
+            httpx.done = r.done;
+            chunkCount++;
+            if (chunkCount % 10 === 0) {
+                await xhttp_sleep(0);
+            }
+            if (!r.value || r.value.length === 0) {
+                await xhttp_sleep(2);
+            }
+        }
+    } catch (error) {
+        throw error;
+    }
+}
+
+function create_xhttp_uploader(httpx, writable) {
+    const counter = new XhttpCounter();
+    const writer = writable.getWriter();
+    
+    const done = (async () => {
+        try {
+            await upload_to_remote_xhttp(counter, writer, httpx);
+        } catch (error) {
+            throw error;
+        } finally {
+            try {
+                await writer.close();
+            } catch (error) {
+                // ignore close errors
+            }
+        }
+    })();
+
+    return {
+        counter,
+        done,
+        abort: () => {
+            try { writer.abort(); } catch (_) {}
+        }
+    };
+}
+
+function create_xhttp_downloader(resp, remote_readable) {
+    const counter = new XhttpCounter();
+    let stream;
+
+    const done = new Promise((resolve, reject) => {
+        stream = new TransformStream(
+            {
+                start(controller) {
+                    counter.add(resp.length);
+                    controller.enqueue(resp);
+                },
+                transform(chunk, controller) {
+                    counter.add(chunk.length);
+                    controller.enqueue(chunk);
+                },
+                cancel(reason) {
+                    reject(`download cancelled: ${reason}`);
+                },
+            },
+            null,
+            new ByteLengthQueuingStrategy({ highWaterMark: XHTTP_BUFFER_SIZE }),
+        );
+
+        let lastActivity = Date.now();
+        const idleTimer = setInterval(() => {
+            if (Date.now() - lastActivity > IDLE_TIMEOUT_MS) {
+                try {
+                    stream.writable.abort?.('idle timeout');
+                } catch (_) {}
+                clearInterval(idleTimer);
+                reject('idle timeout');
+            }
+        }, 5000);
+
+        const reader = remote_readable.getReader();
+        const writer = stream.writable.getWriter();
+
+        ;(async () => {
+            try {
+                let chunkCount = 0;
+                while (true) {
+                    const r = await reader.read();
+                    if (r.done) {
+                        break;
+                    }
+                    lastActivity = Date.now();
+                    await writer.write(r.value);
+                    chunkCount++;
+                    if (chunkCount % 5 === 0) {
+                        await xhttp_sleep(0);
+                    }
+                }
+                await writer.close();
+                resolve();
+            } catch (err) {
+                reject(err);
+            } finally {
+                try { 
+                    reader.releaseLock(); 
+                } catch (_) {}
+                try { 
+                    writer.releaseLock(); 
+                } catch (_) {}
+                clearInterval(idleTimer);
+            }
+        })();
+    });
+
+    return {
+        readable: stream.readable,
+        counter,
+        done,
+        abort: () => {
+            try { stream.readable.cancel(); } catch (_) {}
+            try { stream.writable.abort(); } catch (_) {}
+        }
+    };
+}
+
+async function connect_to_remote_xhttp(httpx, ...remotes) {
+    let attempt = 0;
+    let lastErr;
+    
+    const connectionList = [httpx.hostname, ...remotes.filter(r => r && r !== httpx.hostname)];
+    
+    for (const hostname of connectionList) {
+        if (!hostname) continue;
+        
+        attempt = 0;
+        while (attempt < MAX_RETRIES) {
+            attempt++;
+            try {
+                const remote = connect({ hostname, port: httpx.port });
+                const timeoutPromise = xhttp_sleep(CONNECT_TIMEOUT_MS).then(() => {
+                    throw new Error('connect timeout');
+                });
+                
+                await Promise.race([remote.opened, timeoutPromise]);
+
+                const uploader = create_xhttp_uploader(httpx, remote.writable);
+                const downloader = create_xhttp_downloader(httpx.resp, remote.readable);
+                
+                return { 
+                    downloader, 
+                    uploader,
+                    close: () => {
+                        try { remote.close(); } catch (_) {}
+                    }
+                };
+            } catch (err) {
+                lastErr = err;
+                if (attempt < MAX_RETRIES) {
+                    await xhttp_sleep(500 * attempt);
+                }
+            }
+        }
+    }
+    
+    return null;
+}
+
+async function handle_xhttp_client(body, uuid) {
+    if (ACTIVE_CONNECTIONS >= MAX_CONCURRENT) {
+        return new Response('Too many connections', { status: 429 });
+    }
+    
+    ACTIVE_CONNECTIONS++;
+    
+    let cleaned = false;
+    const cleanup = () => {
+        if (!cleaned) {
+            ACTIVE_CONNECTIONS = Math.max(0, ACTIVE_CONNECTIONS - 1);
+            cleaned = true;
+        }
+    };
+
+    try {
+        const httpx = await read_xhttp_header(body, uuid);
+        if (typeof httpx !== 'object' || !httpx) {
+            return null;
+        }
+
+        // 尝试连接：直连 -> fallbackAddress -> 兜底IP
+        const remoteConnection = await connect_to_remote_xhttp(httpx, fallbackAddress, '13.230.34.30');
+        if (remoteConnection === null) {
+            return null;
+        }
+
+        const connectionClosed = Promise.race([
+            (async () => {
+                try {
+                    await remoteConnection.downloader.done;
+                } catch (err) {
+                    // ignore download errors
+                }
+            })(),
+            (async () => {
+                try {
+                    await remoteConnection.uploader.done;
+                } catch (err) {
+                    // ignore upload errors
+                }
+            })(),
+            xhttp_sleep(IDLE_TIMEOUT_MS).then(() => {
+                // global timeout
+            })
+        ]).finally(() => {
+            try { remoteConnection.close(); } catch (_) {}
+            try { remoteConnection.downloader.abort(); } catch (_) {}
+            try { remoteConnection.uploader.abort(); } catch (_) {}
+            
+            cleanup();
+        });
+
+        return {
+            readable: remoteConnection.downloader.readable,
+            closed: connectionClosed
+        };
+    } catch (error) {
+        cleanup();
+        return null;
+    }
+}
+
+async function handleXhttpPost(request) {
+    try {
+        return await handle_xhttp_client(request.body, authToken);
+    } catch (err) {
+        return null;
+    }
+}
+
+// ==================== xhttp 协议相关函数结束 ====================
+
 function base64ToArray(b64Str) {
 	if (!b64Str) return { error: null };
 	try { b64Str = b64Str.replace(/-/g, '+').replace(/_/g, '/'); return { earlyData: Uint8Array.from(atob(b64Str), (c) => c.charCodeAt(0)).buffer, error: null }; } 
@@ -2669,6 +3131,36 @@ function generateLinksFromNewIPs(list, user, workerDomain) {
             links.push(link);
         }
     });
+    return links;
+}
+
+// xhttp 链接生成函数
+function generateXhttpLinksFromSource(list, user, workerDomain) {
+    const links = [];
+    const nodePath = user.substring(0, 8);
+    
+    list.forEach(item => {
+        const nodeNameBase = item.isp.replace(/\s/g, '_');
+        const safeIP = item.ip.includes(':') ? `[${item.ip}]` : item.ip;
+        const port = item.port || 443;
+        
+        // xhttp 只支持 TLS
+        const wsNodeName = `${nodeNameBase}-${port}-xhttp`;
+        const params = new URLSearchParams({
+            encryption: 'none',
+            security: 'tls',
+            sni: workerDomain,
+            fp: 'chrome',
+            allowInsecure: '1',
+            type: 'xhttp',
+            host: workerDomain,
+            path: `/${nodePath}`,
+            mode: 'stream-one'
+        });
+        
+        links.push(`vless://${user}@${safeIP}:${port}?${params.toString()}#${encodeURIComponent(wsNodeName)}`);
+    });
+    
     return links;
 }
 
