@@ -1118,6 +1118,7 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
     // 使用自定义 Trojan 密码，如果未设置则使用 UUID
     // Trojan 客户端会自动对密码进行 SHA224
     const password = trojanPassword || user;
+    console.log('生成 Trojan 链接，密码:', password, '(trojanPassword变量:', trojanPassword, ')');
 
     list.forEach(item => {
         const nodeNameBase = item.isp.replace(/\s/g, '_');
