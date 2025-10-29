@@ -2463,7 +2463,7 @@ async function parseTrojanHeader(buffer, uuidToken) {
         addressType: atype,
         port: portRemote,
         hostname: address,
-        rawClientData: socks5DataBuffer.slice(portIndex + 4)
+        rawClientData: socks5DataBuffer.slice(portIndex + 2)
     };
 }
 
