@@ -1729,6 +1729,7 @@ function parseSocksConfig(address) {
 
 async function handleSubscriptionPage(request, user = null) {
 	if (!user) user = authToken;
+	const url = new URL(request.url);
 	
 	const pageHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
