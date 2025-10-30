@@ -298,54 +298,6 @@ function parseAddressAndPort(input) {
     return { address: input, port: null };
 }
 
-// UA 识别函数 - 根据客户端 User-Agent 自动识别客户端类型
-function detectClientFromUA(userAgent) {
-    if (!userAgent) return null;
-    
-    const ua = userAgent.toLowerCase();
-    
-    // Clash 系列
-    if (ua.includes('clash')) {
-        if (ua.includes('meta')) return 'clash'; // Clash Meta
-        if (ua.includes('verge')) return 'clash'; // Clash Verge
-        return 'clash';
-    }
-    
-    // Surge
-    if (ua.includes('surge')) return 'surge';
-    
-    // Quantumult X
-    if (ua.includes('quantumult')) return 'surge'; // Quantumult X 使用 surge 格式
-    
-    // Loon
-    if (ua.includes('loon')) return 'loon';
-    
-    // Shadowrocket
-    if (ua.includes('shadowrocket')) return 'surge'; // Shadowrocket 兼容 surge 格式
-    
-    // Stash
-    if (ua.includes('stash')) return 'clash'; // Stash 使用 clash 格式
-    
-    // sing-box
-    if (ua.includes('sing-box') || ua.includes('singbox')) return 'singbox';
-    
-    // V2Ray 系列
-    if (ua.includes('v2ray') || ua.includes('v2rayn') || ua.includes('v2rayng')) return 'v2ray';
-    
-    // Hiddify
-    if (ua.includes('hiddify')) return 'singbox'; // Hiddify 使用 sing-box 格式
-    
-    // Karing
-    if (ua.includes('karing')) return 'singbox'; // Karing 使用 sing-box 格式
-    
-    // 其他常见客户端
-    if (ua.includes('shadowsocks')) return 'v2ray';
-    if (ua.includes('trojan')) return 'v2ray';
-    
-    // 默认返回通用格式
-    return null;
-}
-
 export default {
 	async fetch(request, env, ctx) {
 		try {
@@ -944,50 +896,6 @@ export default {
 						}
 					}
 				}
-				// 智能订阅 - 根据 UA 自动识别客户端类型
-				if (url.pathname.includes('/auto')) {
-					const pathParts = url.pathname.split('/').filter(p => p);
-					// 支持 /{uuid}/auto 格式
-					if (pathParts.length >= 2 && pathParts[pathParts.length - 1] === 'auto') {
-						const user = pathParts[0];
-						if (isValidFormat(user)) {
-							if (user === authToken) {
-								// 获取客户端 UA
-								const userAgent = request.headers.get('User-Agent') || '';
-								const clientType = detectClientFromUA(userAgent);
-								
-								if (clientType && clientType !== 'v2ray') {
-									// 需要转换格式，获取原始订阅并转换
-									const workerDomain = url.hostname;
-									const baseSubscriptionUrl = `https://${workerDomain}/${user}/sub`;
-									const encodedUrl = encodeURIComponent(baseSubscriptionUrl);
-									const converterUrl = `${subConverterUrl}?target=${clientType}&url=${encodedUrl}&insert=false`;
-									
-									// 转发到订阅转换服务
-									const convertResponse = await fetch(converterUrl, {
-										headers: {
-											'User-Agent': 'Cloudflare Worker'
-										}
-									});
-									
-									return new Response(convertResponse.body, {
-										status: convertResponse.status,
-										headers: convertResponse.headers
-									});
-								} else {
-									// V2Ray 格式或无法识别，返回原始订阅
-									return await handleSubscriptionRequest(request, user, url);
-								}
-							} else {
-								return new Response(JSON.stringify({ error: 'UUID错误' }), { 
-									status: 403,
-									headers: { 'Content-Type': 'application/json' }
-								});
-							}
-						}
-					}
-				}
-				
 				if (url.pathname.includes('/sub')) {
 					const pathParts = url.pathname.split('/');
 					if (pathParts.length === 2 && pathParts[1] === 'sub') {
@@ -1651,9 +1559,6 @@ function parseSocksConfig(address) {
 async function handleSubscriptionPage(request, user = null) {
 	if (!user) user = authToken;
 	
-	const url = new URL(request.url);
-	const autoSubUrl = `${url.origin}/${user}/auto`;
-	
 	const pageHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1876,26 +1781,6 @@ async function handleSubscriptionPage(request, user = null) {
             <p class="subtitle">多客户端支持 • 智能优选 • 一键生成</p>
         </div>
         <div class="card">
-            <h2 class="card-title">[ 智能订阅 ]</h2>
-            <div style="padding: 20px; background: rgba(0, 40, 0, 0.6); border: 2px solid #00ff00; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);">
-                <div style="color: #44ff44; font-size: 1.1rem; margin-bottom: 15px; font-weight: bold; text-shadow: 0 0 5px #44ff44;">
-                    🚀 通用订阅链接（自动识别客户端）
-                </div>
-                <div style="background: rgba(0, 0, 0, 0.8); padding: 15px; border: 1px solid #00ff00; border-radius: 5px; word-break: break-all; font-family: 'Courier New', monospace; color: #00ff00; margin-bottom: 15px; cursor: pointer;" onclick="copyAutoLink()" id="autoSubLink">
-                    ${autoSubUrl}
-                </div>
-                <button class="generate-btn" onclick="copyAutoLink()" style="width: 100%; margin-bottom: 15px;">
-                    📋 复制智能订阅链接
-                </button>
-                <div style="color: #00aa00; font-size: 0.9rem; line-height: 1.6;">
-                    <strong style="color: #44ff44;">使用说明：</strong><br>
-                    • 将此链接添加到任意代理客户端<br>
-                    • 服务器会自动识别客户端类型<br>
-                    • 自动返回对应格式的订阅配置<br>
-                    • 支持：Clash、Surge、Sing-box、Loon、V2Ray 等<br>
-                    • <strong style="color: #ffaa00;">推荐使用此链接，一次配置，多端通用</strong>
-                </div>
-            </div>
             <h2 class="card-title">[ 选择客户端 ]</h2>
             <div class="client-grid">
                 <button class="client-btn" onclick="generateClientLink(atob('Y2xhc2g='))">CLASH</button>
@@ -2095,16 +1980,6 @@ async function handleSubscriptionPage(request, user = null) {
     <script>
         // 订阅转换地址（从服务器配置注入）
         var SUB_CONVERTER_URL = "${subConverterUrl}";
-        
-        // 复制智能订阅链接
-        function copyAutoLink() {
-            var autoLink = document.getElementById('autoSubLink').textContent.trim();
-            navigator.clipboard.writeText(autoLink).then(function() {
-                alert('✅ 智能订阅链接已复制！\\n\\n可以直接添加到任意代理客户端，服务器会自动识别客户端类型并返回对应格式的订阅。\\n\\n支持的客户端：\\n• Clash / Clash Meta / Clash Verge\\n• Surge\\n• Sing-box / Hiddify / Karing\\n• Loon\\n• Shadowrocket / Quantumult X\\n• V2Ray / V2RayN / V2RayNG');
-            }).catch(function(err) {
-                alert('复制失败，请手动复制链接');
-            });
-        }
         
         function generateClientLink(clientType) {
             var currentUrl = window.location.href;
@@ -2479,7 +2354,7 @@ async function handleSubscriptionPage(request, user = null) {
                 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.log('❌ 保存失败，响应内容:', errorText);
+                    console.log('❌ 保存失败，状态码:', response.status, '错误:', errorText);
                     showStatus('保存失败: ' + errorText, 'error');
                     return;
                 }
