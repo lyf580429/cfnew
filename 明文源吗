@@ -118,7 +118,7 @@ async function initKVStore(env) {
             kvStore = env.C;
             await loadKVConfig();
         } catch (error) {
-            console.error('KV初始化失败，将禁用KV功能:', error);
+            
             kvStore = null;
         }
     }
@@ -133,7 +133,7 @@ async function loadKVConfig() {
             kvConfig = JSON.parse(configData);
         }
     } catch (error) {
-        console.error('加载KV配置失败:', error);
+        
         kvConfig = {};
     }
 }
@@ -144,7 +144,7 @@ async function saveKVConfig() {
     try {
         await kvStore.put('c', JSON.stringify(kvConfig));
     } catch (error) {
-        console.error('保存KV配置失败:', error);
+        
     }
 }
 
@@ -1243,8 +1243,7 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
     const wsPath = encodeURIComponent('/');
 
     const password = trojanPassword || user;
-    console.log('生成 Trojan 链接，密码:', password, '(trojanPassword变量:', trojanPassword, ')');
-
+    
     list.forEach(item => {
         const nodeNameBase = item.isp.replace(/\s/g, '_');
         const safeIP = item.ip.includes(':') ? `[${item.ip}]` : item.ip;
@@ -1284,7 +1283,7 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
                     host: workerDomain,
                     path: wsPath
                 });
-                links.push(`trojan://${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
+                links.push(`${atob("dHJvamFu")}://${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
             } else {
 
                 const wsNodeName = `${nodeNameBase}-${port}-Trojan-WS`;
@@ -1294,7 +1293,7 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
                     host: workerDomain,
                     path: wsPath
                 });
-                links.push(`trojan://${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
+                links.push(`${atob("dHJvamFu")}://${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
             }
         });
     });
@@ -1359,7 +1358,7 @@ function generateVmessLinksFromSource(list, user, workerDomain) {
 
             const vmessJson = JSON.stringify(vmessConfig);
             const vmessBase64 = btoa(vmessJson);
-            links.push(`vmess://${vmessBase64}`);
+            links.push(`${atob("dm1lc3M=")}://${vmessBase64}`);
         });
     });
     return links;
@@ -1380,7 +1379,7 @@ async function fetchDynamicIPs() {
             return results;
         }
     } catch (e) {
-        console.error("Failed to fetch from wetest.vip:", e);
+        
     }
 
             return [];
@@ -1390,7 +1389,7 @@ async function fetchAndParseWetest(url) {
     try {
         const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         if (!response.ok) {
-            console.error(`Failed to fetch ${url}, status: ${response.status}`);
+            
             return [];
         }
         const html = await response.text();
@@ -1411,12 +1410,12 @@ async function fetchAndParseWetest(url) {
         }
 
         if (results.length === 0) {
-            console.warn(`Warning: Could not parse any IPs from ${url}. The site structure might have changed.`);
+            
         }
 
         return results;
     } catch (error) {
-        console.error(`Error parsing ${url}:`, error);
+        
         return [];
     }
 }
@@ -1464,15 +1463,11 @@ async function handleWsRequest(request) {
 
                 if (enableTrojan && chunk.byteLength >= 56) {
                     const trojanResult = await parseTrojanHeader(chunk, authToken);
-                    console.log('Trojan 解析结果:', {
-                        hasError: trojanResult.hasError,
-                        message: trojanResult.message,
-                        chunkSize: chunk.byteLength
-                    });
+                    
                     if (!trojanResult.hasError) {
                         protocolType = 'trojan';
                         const { addressType, port, hostname, rawClientData } = trojanResult;
-                        console.log(`Trojan 连接: ${hostname}:${port}`);
+                        
                         await forwardTCP(addressType, hostname, port, rawClientData, serverSock, null, remoteConnWrapper);
                         return;
                     }
@@ -1602,9 +1597,9 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc) {
 				if (header) { webSocket.send(await new Blob([header, chunk]).arrayBuffer()); header = null; }
                 else { webSocket.send(chunk); }
 			},
-			abort(reason) { console.error("Readable aborted:", reason); },
+			abort(reason) {  },
 		})
-	).catch((error) => { console.error("Stream connection error:", error); closeSocketQuietly(webSocket); });
+	).catch((error) => {  closeSocketQuietly(webSocket); });
 	if (!hasData && retryFunc) retryFunc();
 }
 
@@ -1623,7 +1618,7 @@ async function forwardUDP(udpChunk, webSocket, respHeader) {
 				}
 			},
 		}));
-	} catch (error) { console.error(`DNS forward error: ${error.message}`); }
+	} catch (error) {  }
 }
 
 async function establishSocksConnection(addrType, address, port) {
@@ -1889,6 +1884,10 @@ async function handleSubscriptionPage(request, user = null) {
             0%, 100% { opacity: 0.6; }
             50% { opacity: 1; }
         }
+        @keyframes scan {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
     </style>
 </head>
 <body>
@@ -1903,23 +1902,26 @@ async function handleSubscriptionPage(request, user = null) {
         </div>
         <div class="card">
             <h2 class="card-title">[ 智能订阅 ]</h2>
-            <div style="padding: 20px; background: rgba(0, 40, 0, 0.6); border: 2px solid #00ff00; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);">
-                <div style="color: #44ff44; font-size: 1.1rem; margin-bottom: 15px; font-weight: bold; text-shadow: 0 0 5px #44ff44;">
-                    🚀 通用订阅链接（自动识别客户端）
+            <div style="padding: 20px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 0 30px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.1); position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, #00ff00, transparent); animation: scan 2s linear infinite;"></div>
+                <div style="color: #00ff00; font-size: 1.2rem; margin-bottom: 20px; font-weight: bold; text-shadow: 0 0 10px #00ff00; font-family: 'Courier New', monospace; letter-spacing: 2px;">
+                    &gt;&gt; 通用订阅链接（自动识别）
                 </div>
-                <div style="background: rgba(0, 0, 0, 0.8); padding: 15px; border: 1px solid #00ff00; border-radius: 5px; word-break: break-all; font-family: 'Courier New', monospace; color: #00ff00; margin-bottom: 15px; cursor: pointer;" onclick="copyAutoLink()" id="autoSubLink">
-                    ${url.origin}/${user}/auto
+                <div style="background: rgba(0, 0, 0, 0.95); padding: 20px; border: 2px solid #00ff00; border-radius: 5px; word-break: break-all; font-family: 'Courier New', monospace; color: #00ff00; margin-bottom: 20px; cursor: pointer; box-shadow: inset 0 0 15px rgba(0, 255, 0, 0.3); transition: all 0.3s;" onclick="copyAutoLink()" id="autoSubLink" onmouseover="this.style.boxShadow='inset 0 0 25px rgba(0, 255, 0, 0.5)'" onmouseout="this.style.boxShadow='inset 0 0 15px rgba(0, 255, 0, 0.3)'">
+                    <span style="color: #44ff44;">&gt;</span> ${url.origin}/${user}/auto
                 </div>
-                <button class="generate-btn" onclick="copyAutoLink()" style="width: 100%; margin-bottom: 15px;">
-                    📋 复制智能订阅链接
+                <button class="generate-btn" onclick="copyAutoLink()" style="width: 100%; margin-bottom: 20px; background: rgba(0, 255, 0, 0.15); border: 2px solid #00ff00; padding: 15px; color: #00ff00; font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer; text-shadow: 0 0 10px #00ff00; box-shadow: 0 0 20px rgba(0, 255, 0, 0.4); transition: all 0.3s;" onmouseover="this.style.boxShadow='0 0 30px rgba(0, 255, 0, 0.8)'; this.style.background='rgba(0, 255, 0, 0.25)'" onmouseout="this.style.boxShadow='0 0 20px rgba(0, 255, 0, 0.4)'; this.style.background='rgba(0, 255, 0, 0.15)'">
+                    &gt; 一键复制链接 &lt;
                 </button>
-                <div style="color: #00aa00; font-size: 0.9rem; line-height: 1.6;">
-                    <strong style="color: #44ff44;">使用说明：</strong><br>
-                    • 将此链接添加到任意代理客户端<br>
-                    • 服务器会自动识别客户端类型<br>
-                    • 自动返回对应格式的订阅配置<br>
-                    • 支持：Clash、Surge、Sing-box、Loon、V2Ray 等<br>
-                    • <strong style="color: #ffaa00;">推荐使用此链接，一次配置，多端通用</strong>
+                <div style="color: #00aa00; font-size: 0.9rem; line-height: 1.8; font-family: 'Courier New', monospace; border-left: 3px solid #00ff00; padding-left: 15px; background: rgba(0, 255, 0, 0.05);">
+                    <div style="color: #00ff00; margin-bottom: 10px; font-weight: bold; text-shadow: 0 0 5px #00ff00;">&gt; 使用说明：</div>
+                    <div style="margin-left: 10px;">
+                    → 将此链接添加到任意代理客户端<br>
+                    → 服务器自动识别客户端类型<br>
+                    → 自动返回对应格式配置<br>
+                    → 支持：Clash / Surge / Sing-box / Loon / V2Ray<br>
+                    → <span style="color: #ffaa00; text-shadow: 0 0 5px #ffaa00;">推荐使用 • 一次配置多端通用</span>
+                    </div>
                 </div>
             </div>
             <h2 class="card-title">[ 选择客户端 ]</h2>
@@ -2176,7 +2178,7 @@ async function handleSubscriptionPage(request, user = null) {
                     });
                 })
                 .catch(function(error) {
-                    console.error("获取订阅失败:", error);
+                    
                     alert("获取订阅失败，请重试");
                 });
         }
@@ -2296,7 +2298,7 @@ async function handleSubscriptionPage(request, user = null) {
                 }
 
             } catch (error) {
-                console.error('状态检测失败:', error);
+                
                 document.getElementById('regionStatus').innerHTML = 'Worker地区: <span style="color: #ff4444;">❌ 检测失败</span>';
                 document.getElementById('geoInfo').innerHTML = '地理位置: <span style="color: #ff4444;">❌ 检测失败</span>';
                 document.getElementById('backupStatus').innerHTML = 'ProxyIP状态: <span style="color: #ff4444;">❌ 检测失败</span>';
@@ -2316,52 +2318,45 @@ async function handleSubscriptionPage(request, user = null) {
                     alert('API检测失败: ' + (data.error || '未知错误'));
                 }
             } catch (error) {
-                console.error('API测试失败:', error);
+                
                 alert('API测试失败: ' + error.message);
             }
         }
 
         async function checkKVStatus() {
             const apiUrl = window.location.pathname + '/api/config';
-            console.log('🔍 调试信息 - 检查KV状态');
-            console.log('请求URL:', apiUrl);
-
+            
             try {
                 const response = await fetch(apiUrl);
-                console.log('响应状态:', response.status);
-                console.log('响应头:', Object.fromEntries(response.headers.entries()));
-
+                
                 if (response.status === 503) {
 
-                    console.log('❌ KV存储未配置 (503)');
                     document.getElementById('kvStatus').innerHTML = '<span style="color: #ffaa00;">⚠️ KV存储未启用或未配置</span>';
                     document.getElementById('configCard').style.display = 'block';
                     document.getElementById('currentConfig').textContent = 'KV存储未配置，无法使用配置管理功能。\\n\\n请在Cloudflare Workers中:\\n1. 创建KV命名空间\\n2. 绑定环境变量 C\\n3. 重新部署代码';
                 } else if (response.ok) {
                     const data = await response.json();
-                    console.log('响应数据:', data);
-                    console.log('kvEnabled:', data.kvEnabled);
-
+                    
                     if (data && data.kvEnabled === true) {
-                        console.log('✅ KV存储已启用');
+                        
                         document.getElementById('kvStatus').innerHTML = '<span style="color: #44ff44;">✅ KV存储已启用，可以使用配置管理功能</span>';
                         document.getElementById('configContent').style.display = 'block';
                         document.getElementById('configCard').style.display = 'block';
                         await loadCurrentConfig();
                     } else {
-                        console.log('❌ KV存储未启用 (响应中kvEnabled不为true)');
+                        
                         document.getElementById('kvStatus').innerHTML = '<span style="color: #ffaa00;">⚠️ KV存储未启用或未配置</span>';
                         document.getElementById('configCard').style.display = 'block';
                         document.getElementById('currentConfig').textContent = 'KV存储未配置';
                     }
                 } else {
-                    console.log('❌ 响应错误:', response.status, response.statusText);
+                    
                     document.getElementById('kvStatus').innerHTML = '<span style="color: #ffaa00;">⚠️ KV存储未启用或未配置</span>';
                     document.getElementById('configCard').style.display = 'block';
                     document.getElementById('currentConfig').textContent = 'KV存储检测失败 - 状态码: ' + response.status;
                 }
             } catch (error) {
-                console.log('❌ 请求失败:', error);
+                
                 document.getElementById('kvStatus').innerHTML = '<span style="color: #ffaa00;">⚠️ KV存储未启用或未配置</span>';
                 document.getElementById('configCard').style.display = 'block';
                 document.getElementById('currentConfig').textContent = 'KV存储检测失败 - 错误: ' + error.message;
@@ -2370,26 +2365,22 @@ async function handleSubscriptionPage(request, user = null) {
 
         async function loadCurrentConfig() {
             const apiUrl = window.location.pathname + '/api/config';
-            console.log('📥 调试信息 - 加载配置');
-            console.log('请求URL:', apiUrl);
-
+            
             try {
                 const response = await fetch(apiUrl);
-                console.log('加载响应状态:', response.status);
-
+                
                 if (response.status === 503) {
-                    console.log('❌ KV存储未配置，无法加载配置');
+                    
                     document.getElementById('currentConfig').textContent = 'KV存储未配置，无法加载配置';
                     return;
                 }
                 if (!response.ok) {
-                    console.log('❌ 加载配置失败，状态码:', response.status);
+                    
                     document.getElementById('currentConfig').textContent = '加载配置失败';
                     return;
                 }
                 const config = await response.json();
-                console.log('加载的配置数据:', config);
-
+                
                 const displayConfig = {};
                 for (const [key, value] of Object.entries(config)) {
                     if (key !== 'kvEnabled') {
@@ -2467,10 +2458,7 @@ async function handleSubscriptionPage(request, user = null) {
 
         async function saveConfig(configData) {
             const apiUrl = window.location.pathname + '/api/config';
-            console.log('💾 调试信息 - 保存配置');
-            console.log('请求URL:', apiUrl);
-            console.log('配置数据:', configData);
-
+            
             try {
                 const response = await fetch(apiUrl, {
                     method: 'POST',
@@ -2478,22 +2466,18 @@ async function handleSubscriptionPage(request, user = null) {
                     body: JSON.stringify(configData)
                 });
 
-                console.log('保存响应状态:', response.status);
-                console.log('保存响应头:', Object.fromEntries(response.headers.entries()));
-
                 if (response.status === 503) {
-                    console.log('❌ KV存储未配置，无法保存');
+                    
                     showStatus('KV存储未配置，无法保存配置。请先在Cloudflare Workers中配置KV存储。', 'error');
                     return;
                 }
 
                 const result = await response.json();
-                console.log('保存响应数据:', result);
-
+                
                 showStatus(result.message, result.success ? 'success' : 'error');
 
                 if (result.success) {
-                    console.log('✅ 保存成功，重新加载配置');
+                    
                     await loadCurrentConfig();
 
                     updateWkRegionState();
@@ -2502,10 +2486,10 @@ async function handleSubscriptionPage(request, user = null) {
                         window.location.reload();
                     }, 1500);
                 } else {
-                    console.log('❌ 保存失败:', result.message);
+                    
                 }
             } catch (error) {
-                console.log('❌ 保存请求失败:', error);
+                
                 showStatus('保存失败: ' + error.message, 'error');
             }
         }
@@ -2662,11 +2646,7 @@ async function parseTrojanHeader(buffer, uuidToken) {
         };
     }
     const password = new TextDecoder().decode(buffer.slice(0, crLfIndex));
-    console.log('Trojan 密码验证:', {
-        received: password.substring(0, 10) + '...',
-        expected: sha224Password.substring(0, 10) + '...',
-        match: password === sha224Password
-    });
+    
     if (password !== sha224Password) {
         return {
             hasError: true,
@@ -3358,7 +3338,7 @@ function generateXhttpLinksFromSource(list, user, workerDomain) {
             mode: 'stream-one'
         });
 
-        links.push(`vless://${user}@${safeIP}:${port}?${params.toString()}#${encodeURIComponent(wsNodeName)}`);
+        links.push(`${atob("dmxlc3M=")}://${user}@${safeIP}:${port}?${params.toString()}#${encodeURIComponent(wsNodeName)}`);
     });
 
     return links;
@@ -3381,19 +3361,19 @@ async function generateTrojanLinksFromNewIPs(list, user, workerDomain) {
         if (CF_HTTPS_PORTS.includes(port)) {
 
             const wsNodeName = `${nodeName}-${port}-Trojan-WS-TLS`;
-            const link = `trojan://${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+            const link = `${atob("dHJvamFu")}://${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
         } else if (CF_HTTP_PORTS.includes(port)) {
 
             if (!disableNonTLS) {
                 const wsNodeName = `${nodeName}-${port}-Trojan-WS`;
-                const link = `trojan://${password}@${item.ip}:${port}?security=none&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+                const link = `${atob("dHJvamFu")}://${password}@${item.ip}:${port}?security=none&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
                 links.push(link);
             }
         } else {
 
             const wsNodeName = `${nodeName}-${port}-Trojan-WS-TLS`;
-            const link = `trojan://${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+            const link = `${atob("dHJvamFu")}://${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
         }
     });
@@ -3433,7 +3413,7 @@ function generateVmessLinksFromNewIPs(list, user, workerDomain) {
             };
             const vmessJson = JSON.stringify(vmessConfig);
             const vmessBase64 = btoa(vmessJson);
-            links.push(`vmess://${vmessBase64}`);
+            links.push(`${atob("dm1lc3M=")}://${vmessBase64}`);
         } else if (CF_HTTP_PORTS.includes(port)) {
 
             if (!disableNonTLS) {
@@ -3455,7 +3435,7 @@ function generateVmessLinksFromNewIPs(list, user, workerDomain) {
                 };
                 const vmessJson = JSON.stringify(vmessConfig);
                 const vmessBase64 = btoa(vmessJson);
-                links.push(`vmess://${vmessBase64}`);
+                links.push(`${atob("dm1lc3M=")}://${vmessBase64}`);
             }
         } else {
 
@@ -3477,7 +3457,7 @@ function generateVmessLinksFromNewIPs(list, user, workerDomain) {
             };
             const vmessJson = JSON.stringify(vmessConfig);
             const vmessBase64 = btoa(vmessJson);
-            links.push(`vmess://${vmessBase64}`);
+            links.push(`${atob("dm1lc3M=")}://${vmessBase64}`);
         }
     });
     return links;
