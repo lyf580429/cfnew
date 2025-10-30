@@ -806,15 +806,15 @@ export default {
             </div>
             <div class="terminal-line">
                 <span class="terminal-prompt">root:~$</span>
-                <span class="terminal-output">请输入你U变量的值</span>
+                <span class="terminal-output">${customPath && customPath.trim() ? '请输入你D变量的值' : '请输入你U变量的值'}</span>
             </div>
             <div class="terminal-line">
                 <span class="terminal-prompt">root:~$</span>
-                <span class="terminal-output">命令: connect [UUID]</span>
+                <span class="terminal-output">命令: connect [${customPath && customPath.trim() ? 'PATH' : 'UUID'}]</span>
             </div>
             <div class="terminal-line">
                 <span class="terminal-prompt">root:~$</span>
-                <input type="text" class="terminal-input" id="uuidInput" placeholder="输入U变量的内容并且回车..." autofocus>
+                <input type="text" class="terminal-input" id="uuidInput" placeholder="${customPath && customPath.trim() ? '输入D变量的内容并且回车...' : '输入U变量的内容并且回车...'}" autofocus>
                 <span class="terminal-cursor"></span>
             </div>
         </div>
@@ -889,22 +889,43 @@ export default {
         
         function handleUUIDInput() {
             const input = document.getElementById('uuidInput');
-            const uuid = input.value.trim();
+            const inputValue = input.value.trim();
+            const customPath = '${customPath}';
             
-            if (uuid) {
-                addTerminalLine('connect ' + uuid, 'output');
+            if (inputValue) {
+                addTerminalLine('connect ' + inputValue, 'output');
                 
-                if (isValidUUID(uuid)) {
-                    addTerminalLine('正在入侵...', 'output');
-                    setTimeout(() => {
-                        addTerminalLine('连接成功！返回结果...', 'success');
+                // 如果启用了 d 变量
+                if (customPath) {
+                    const cleanPath = customPath.startsWith('/') ? customPath : '/' + customPath;
+                    const cleanInput = inputValue.startsWith('/') ? inputValue : '/' + inputValue;
+                    
+                    if (cleanInput === cleanPath) {
+                        addTerminalLine('正在连接...', 'output');
                         setTimeout(() => {
-                            window.location.href = '/' + uuid;
-                        }, 1000);
-                    }, 500);
+                            addTerminalLine('连接成功！返回结果...', 'success');
+                            setTimeout(() => {
+                                window.location.href = cleanPath;
+                            }, 1000);
+                        }, 500);
+                    } else {
+                        addTerminalLine('错误: 路径不匹配', 'error');
+                        addTerminalLine('请输入正确的D变量路径: ' + cleanPath, 'output');
+                    }
                 } else {
-                    addTerminalLine('错误: 无效的UUID格式', 'error');
-                    addTerminalLine('请重新输入有效的UUID', 'output');
+                    // 使用 UUID 模式
+                    if (isValidUUID(inputValue)) {
+                        addTerminalLine('正在入侵...', 'output');
+                        setTimeout(() => {
+                            addTerminalLine('连接成功！返回结果...', 'success');
+                            setTimeout(() => {
+                                window.location.href = '/' + inputValue;
+                            }, 1000);
+                        }, 500);
+                    } else {
+                        addTerminalLine('错误: 无效的UUID格式', 'error');
+                        addTerminalLine('请重新输入有效的UUID', 'output');
+                    }
                 }
                 
                 input.value = '';
@@ -926,35 +947,51 @@ export default {
 </html>`;
 					return new Response(terminalHtml, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 				}
-				if (url.pathname.length > 1 && url.pathname !== '/' && !url.pathname.includes('/sub')) {
-					const user = url.pathname.replace(/\/$/, '').substring(1);
+			// 检查是否使用自定义路径 (d 变量)
+			if (customPath && customPath.trim()) {
+				const cleanCustomPath = customPath.startsWith('/') ? customPath : '/' + customPath;
+				
+				// 自定义路径的订阅页面
+				if (url.pathname === cleanCustomPath || url.pathname === cleanCustomPath + '/') {
+					return await handleSubscriptionPage(request, authToken);
+				}
+				
+				// 自定义路径的订阅请求
+				if (url.pathname === cleanCustomPath + '/sub') {
+					return await handleSubscriptionRequest(request, authToken, url);
+				}
+			}
+			
+			// UUID 路径处理
+			if (url.pathname.length > 1 && url.pathname !== '/' && !url.pathname.includes('/sub')) {
+				const user = url.pathname.replace(/\/$/, '').substring(1);
+				if (isValidFormat(user)) {
+					if (user === authToken) {
+						return await handleSubscriptionPage(request, user);
+					} else {
+						return new Response(JSON.stringify({ error: 'UUID错误 请注意变量名称是u不是uuid' }), { 
+							status: 403,
+							headers: { 'Content-Type': 'application/json' }
+						});
+					}
+				}
+			}
+			if (url.pathname.includes('/sub')) {
+				const pathParts = url.pathname.split('/');
+				if (pathParts.length === 2 && pathParts[1] === 'sub') {
+					const user = pathParts[0].substring(1);
 					if (isValidFormat(user)) {
 						if (user === authToken) {
-							return await handleSubscriptionPage(request, user);
+							return await handleSubscriptionRequest(request, user, url);
 						} else {
-							return new Response(JSON.stringify({ error: 'UUID错误 请注意变量名称是u不是uuid' }), { 
+							return new Response(JSON.stringify({ error: 'UUID错误' }), { 
 								status: 403,
 								headers: { 'Content-Type': 'application/json' }
 							});
 						}
 					}
 				}
-				if (url.pathname.includes('/sub')) {
-					const pathParts = url.pathname.split('/');
-					if (pathParts.length === 2 && pathParts[1] === 'sub') {
-						const user = pathParts[0].substring(1);
-						if (isValidFormat(user)) {
-							if (user === authToken) {
-								return await handleSubscriptionRequest(request, user, url);
-							} else {
-								return new Response(JSON.stringify({ error: 'UUID错误' }), { 
-									status: 403,
-									headers: { 'Content-Type': 'application/json' }
-								});
-							}
-						}
-					}
-				}
+			}
 				if (url.pathname.toLowerCase().includes(`/${subPath}`)) {
 					return await handleSubscriptionRequest(request, authToken);
 				}
