@@ -14,11 +14,12 @@ let enableRegionMatching = true;
 let currentWorkerRegion = '';
 let manualWorkerRegion = '';
 let preferredIPsURL = '';
+let customPath = '';  // 自定义路径 (d 变量)
 
 // 协议选择配置
-let enableVless = true;
-let enableTrojan = true;  // 默认启用 Trojan
-let enableXhttp = false;  // xhttp 协议（基于 HTTP POST 的 VLESS）
+let enableVless = true;   // 默认启用 VLESS
+let enableTrojan = false; // 默认禁用 Trojan
+let enableXhttp = false;  // 默认禁用 xhttp 协议（基于 HTTP POST 的 VLESS）
 let trojanPassword = '';  // Trojan 自定义密码，为空则使用 UUID
 
 // 订阅转换配置
@@ -497,16 +498,19 @@ export default {
 				enableVless = true;
 			}
 
-			// 优先使用KV配置，然后使用环境变量，如果都没有则使用默认URL
-			preferredIPsURL = getConfigValue('yxURL', env.yxURL || env.YXURL) || 'https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt';
-			
-			// 如果yxURL不是默认值，清空域名但保留backupIPs作为后备选项
-			const defaultURL = 'https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt';
-			if (preferredIPsURL !== defaultURL) {
-				directDomains.length = 0;
-				customPreferredIPs = [];
-				customPreferredDomains = [];
-			}
+		// 优先使用KV配置，然后使用环境变量，如果都没有则使用默认URL
+		preferredIPsURL = getConfigValue('yxURL', env.yxURL || env.YXURL) || 'https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt';
+		
+		// 自定义路径配置 (d 变量)
+		customPath = getConfigValue('d', env.d || env.D) || '';
+		
+		// 如果yxURL不是默认值，清空域名但保留backupIPs作为后备选项
+		const defaultURL = 'https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt';
+		if (preferredIPsURL !== defaultURL) {
+			directDomains.length = 0;
+			customPreferredIPs = [];
+			customPreferredDomains = [];
+		}
 
 		const url = new URL(request.url);
 
@@ -1885,7 +1889,7 @@ async function handleSubscriptionPage(request, user = null) {
                             </div>
                             <div style="margin-bottom: 10px;">
                                 <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
-                                    <input type="checkbox" id="enableTrojan" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                    <input type="checkbox" id="enableTrojan" style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
                                     <span style="font-size: 1.1rem;">启用 Trojan 协议</span>
                                 </label>
                             </div>
@@ -1903,6 +1907,36 @@ async function handleSubscriptionPage(request, user = null) {
                             <small style="color: #00aa00; font-size: 0.85rem; display: block; margin-top: 10px;">可以同时启用多个协议。订阅将生成选中协议的节点。<br>• VLESS WS: 基于 WebSocket 的标准协议<br>• Trojan: 使用 SHA224 密码认证<br>• xhttp: 基于 HTTP POST 的伪装协议（需要绑定自定义域名并开启 gRPC）</small>
                         </div>
                     </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">自定义路径 (d):</label>
+                        <input type="text" id="customPath" placeholder="例如: /mypath 或留空使用 UUID" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
+                        <small style="color: #00aa00; font-size: 0.85rem;">自定义订阅路径。留空则使用 UUID 作为路径。</small>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">自定义ProxyIP (p):</label>
+                        <input type="text" id="customIP" placeholder="例如: 1.2.3.4:443" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
+                        <small style="color: #00aa00; font-size: 0.85rem;">自定义ProxyIP地址和端口</small>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">优选IP列表 (yx):</label>
+                        <input type="text" id="preferredIPs" placeholder="例如: 1.2.3.4:443#香港节点,5.6.7.8:80#美国节点,example.com:8443#新加坡节点" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
+                        <small style="color: #00aa00; font-size: 0.85rem;">格式: IP:端口#节点名称 或 IP:端口 (无#则使用默认名称)。支持多个，用逗号分隔。<span style="color: #ffaa00;">API添加的IP会自动显示在这里。</span></small>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">优选IP来源URL (yxURL):</label>
+                        <input type="text" id="preferredIPsURL" placeholder="默认: https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
+                        <small style="color: #00aa00; font-size: 0.85rem;">自定义优选IP列表来源URL，留空则使用默认地址</small>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">SOCKS5配置 (s):</label>
+                        <input type="text" id="socksConfig" placeholder="例如: user:pass@host:port 或 host:port" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
+                        <small style="color: #00aa00; font-size: 0.85rem;">SOCKS5代理地址，用于转发所有出站流量</small>
+                    </div>
+                    <button type="submit" style="background: rgba(0, 255, 0, 0.15); border: 2px solid #00ff00; padding: 12px 24px; color: #00ff00; font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer; margin-right: 10px; text-shadow: 0 0 8px #00ff00; transition: all 0.4s ease;">保存配置</button>
+                </form>
+                
+                <h3 style="color: #00ff00; margin: 20px 0 15px 0; font-size: 1.2rem;">高级控制</h3>
+                <form id="advancedConfigForm" style="margin-bottom: 20px;">
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">订阅转换地址:</label>
                         <input type="text" id="subConverterUrl" placeholder="默认: https://url.v1.mk/sub" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
@@ -1932,31 +1966,6 @@ async function handleSubscriptionPage(request, user = null) {
                             <small style="color: #00aa00; font-size: 0.85rem; display: block; margin-top: 10px;">控制订阅中包含哪些内置优选节点。默认全部启用。</small>
                         </div>
                     </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">自定义ProxyIP (p):</label>
-                        <input type="text" id="customIP" placeholder="例如: 1.2.3.4:443" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
-                        <small style="color: #00aa00; font-size: 0.85rem;">自定义ProxyIP地址和端口</small>
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">优选IP列表 (yx):</label>
-                        <input type="text" id="preferredIPs" placeholder="例如: 1.2.3.4:443#香港节点,5.6.7.8:80#美国节点,example.com:8443#新加坡节点" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
-                        <small style="color: #00aa00; font-size: 0.85rem;">格式: IP:端口#节点名称 或 IP:端口 (无#则使用默认名称)。支持多个，用逗号分隔。<span style="color: #ffaa00;">API添加的IP会自动显示在这里。</span></small>
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">优选IP来源URL (yxURL):</label>
-                        <input type="text" id="preferredIPsURL" placeholder="默认: https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
-                        <small style="color: #00aa00; font-size: 0.85rem;">自定义优选IP列表来源URL，留空则使用默认地址</small>
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">SOCKS5配置 (s):</label>
-                        <input type="text" id="socksConfig" placeholder="例如: user:pass@host:port 或 host:port" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
-                        <small style="color: #00aa00; font-size: 0.85rem;">SOCKS5代理地址，用于转发所有出站流量</small>
-                    </div>
-                    <button type="submit" style="background: rgba(0, 255, 0, 0.15); border: 2px solid #00ff00; padding: 12px 24px; color: #00ff00; font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer; margin-right: 10px; text-shadow: 0 0 8px #00ff00; transition: all 0.4s ease;">保存配置</button>
-                </form>
-                
-                <h3 style="color: #00ff00; margin: 20px 0 15px 0; font-size: 1.2rem;">高级控制</h3>
-                <form id="advancedConfigForm" style="margin-bottom: 20px;">
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">允许API管理 (apiEnabled):</label>
                         <select id="apiEnabled" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
@@ -2001,6 +2010,10 @@ async function handleSubscriptionPage(request, user = null) {
                 </form>
                 <div id="currentConfig" style="background: rgba(0, 0, 0, 0.9); border: 1px solid #00ff00; padding: 15px; margin: 10px 0; font-family: 'Courier New', monospace; color: #00ff00;">
                     加载中...
+                </div>
+                <div id="pathTypeInfo" style="background: rgba(0, 20, 0, 0.7); border: 1px solid #00ff00; padding: 15px; margin: 10px 0; font-family: 'Courier New', monospace; color: #00ff00;">
+                    <div style="font-weight: bold; margin-bottom: 8px; color: #44ff44; text-shadow: 0 0 5px #44ff44;">📍 当前路径配置</div>
+                    <div id="pathTypeStatus">检测中...</div>
                 </div>
                 <button onclick="loadCurrentConfig()" style="background: rgba(0, 255, 0, 0.15); border: 2px solid #00ff00; padding: 12px 24px; color: #00ff00; font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer; margin-right: 10px; text-shadow: 0 0 8px #00ff00; transition: all 0.4s ease;">刷新配置</button>
                 <button onclick="resetAllConfig()" style="background: rgba(255, 0, 0, 0.15); border: 2px solid #ff0000; padding: 12px 24px; color: #ff0000; font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer; text-shadow: 0 0 8px #ff0000; transition: all 0.4s ease;">重置配置</button>
@@ -2312,13 +2325,14 @@ async function handleSubscriptionPage(request, user = null) {
                 // 更新表单值
                 document.getElementById('wkRegion').value = config.wk || '';
                 document.getElementById('enableVless').checked = config.enableVless !== 'no';
-                document.getElementById('enableTrojan').checked = config.enableTrojan === 'yes' || config.enableTrojan !== 'no';
+                document.getElementById('enableTrojan').checked = config.enableTrojan === 'yes';
                 document.getElementById('enableXhttp').checked = config.enableXhttp === 'yes';
                 document.getElementById('trojanPassword').value = config.trojanPassword || '';
                 document.getElementById('subConverterUrl').value = config.subConverterUrl || '';
                 document.getElementById('enablePreferredDomains').checked = config.enablePreferredDomains !== 'no';
                 document.getElementById('enablePreferredIPs').checked = config.enablePreferredIPs !== 'no';
                 document.getElementById('enableGithubIPs').checked = config.enableGithubIPs !== 'no';
+                document.getElementById('customPath').value = config.d || '';
                 document.getElementById('customIP').value = config.p || '';
                 document.getElementById('preferredIPs').value = config.yx || '';
                 document.getElementById('preferredIPsURL').value = config.yxURL || '';
@@ -2329,11 +2343,38 @@ async function handleSubscriptionPage(request, user = null) {
                 document.getElementById('portControl').value = config.dkby || '';
                 document.getElementById('preferredControl').value = config.yxby || '';
                 
+                // 更新路径类型显示
+                updatePathTypeStatus(config.d);
+                
                 // 检查p变量，如果有值则禁用wk地区选择
                 updateWkRegionState();
                 
             } catch (error) {
                 document.getElementById('currentConfig').textContent = '加载配置失败: ' + error.message;
+            }
+        }
+        
+        // 更新路径类型显示
+        function updatePathTypeStatus(customPath) {
+            const pathTypeStatus = document.getElementById('pathTypeStatus');
+            const currentUrl = window.location.href;
+            const pathParts = window.location.pathname.split('/').filter(p => p);
+            const currentPath = pathParts.length > 0 ? pathParts[0] : '';
+            
+            if (customPath && customPath.trim()) {
+                // 使用自定义路径 (d)
+                pathTypeStatus.innerHTML = `
+                    <div style="color: #44ff44;">使用类型: <strong>自定义路径 (d)</strong></div>
+                    <div style="margin-top: 5px; color: #00ff00;">当前路径: <span style="color: #ffaa00;">${customPath}</span></div>
+                    <div style="margin-top: 5px; font-size: 0.9rem; color: #00aa00;">访问地址: ${currentUrl.split('/')[0] + '//' + currentUrl.split('/')[2]}${customPath}/sub</div>
+                `;
+            } else {
+                // 使用 UUID (u)
+                pathTypeStatus.innerHTML = `
+                    <div style="color: #44ff44;">使用类型: <strong>UUID 路径 (u)</strong></div>
+                    <div style="margin-top: 5px; color: #00ff00;">当前路径: <span style="color: #ffaa00;">${currentPath || '(UUID)'}</span></div>
+                    <div style="margin-top: 5px; font-size: 0.9rem; color: #00aa00;">访问地址: ${currentUrl.split('/sub')[0]}/sub</div>
+                `;
             }
         }
         
@@ -2449,6 +2490,7 @@ async function handleSubscriptionPage(request, user = null) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
                             wk: '',
+                            d: '',
                             p: '',
                             yx: '',
                             yxURL: '',
@@ -2538,10 +2580,7 @@ async function handleSubscriptionPage(request, user = null) {
                         enableTrojan: document.getElementById('enableTrojan').checked ? 'yes' : 'no',
                         enableXhttp: document.getElementById('enableXhttp').checked ? 'yes' : 'no',
                         trojanPassword: document.getElementById('trojanPassword').value,
-                        subConverterUrl: document.getElementById('subConverterUrl').value,
-                        enablePreferredDomains: document.getElementById('enablePreferredDomains').checked ? 'yes' : 'no',
-                        enablePreferredIPs: document.getElementById('enablePreferredIPs').checked ? 'yes' : 'no',
-                        enableGithubIPs: document.getElementById('enableGithubIPs').checked ? 'yes' : 'no',
+                        d: document.getElementById('customPath').value,
                         p: document.getElementById('customIP').value,
                         yx: document.getElementById('preferredIPs').value,
                         yxURL: document.getElementById('preferredIPsURL').value,
@@ -2565,6 +2604,10 @@ async function handleSubscriptionPage(request, user = null) {
                 advancedConfigForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
                     const configData = {
+                        subConverterUrl: document.getElementById('subConverterUrl').value,
+                        enablePreferredDomains: document.getElementById('enablePreferredDomains').checked ? 'yes' : 'no',
+                        enablePreferredIPs: document.getElementById('enablePreferredIPs').checked ? 'yes' : 'no',
+                        enableGithubIPs: document.getElementById('enableGithubIPs').checked ? 'yes' : 'no',
                         apiEnabled: document.getElementById('apiEnabled').value,
                         rm: document.getElementById('regionMatching').value,
                         qj: document.getElementById('downgradeControl').value,
