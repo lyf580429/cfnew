@@ -16,10 +16,19 @@ let manualWorkerRegion = '';
 let preferredIPsURL = '';
 
 // 协议选择配置
-let enableVless = true;
-let enableTrojan = true;  // 默认启用 Trojan
+let enableVless = false;
+let enableTrojan = false;
+let enableVmess = true;   // 默认只启用 VMess
 let enableXhttp = false;  // xhttp 协议（基于 HTTP POST 的 VLESS）
 let trojanPassword = '';  // Trojan 自定义密码，为空则使用 UUID
+
+// 订阅转换配置
+let subConverterUrl = 'https://url.v1.mk/sub';  // 默认订阅转换地址
+
+// 优选类型控制
+let enablePreferredDomains = true;   // 启用优选域名
+let enablePreferredIPs = true;       // 启用优选 IP
+let enableGithubIPs = true;          // 启用 GitHub 默认优选
 
 // KV存储相关变量
 let kvStore = null;
@@ -290,6 +299,54 @@ function parseAddressAndPort(input) {
     return { address: input, port: null };
 }
 
+// UA 识别函数 - 根据客户端 User-Agent 自动识别客户端类型
+function detectClientFromUA(userAgent) {
+    if (!userAgent) return null;
+    
+    const ua = userAgent.toLowerCase();
+    
+    // Clash 系列
+    if (ua.includes('clash')) {
+        if (ua.includes('meta')) return 'clash'; // Clash Meta
+        if (ua.includes('verge')) return 'clash'; // Clash Verge
+        return 'clash';
+    }
+    
+    // Surge
+    if (ua.includes('surge')) return 'surge';
+    
+    // Quantumult X
+    if (ua.includes('quantumult')) return 'surge'; // Quantumult X 使用 surge 格式
+    
+    // Loon
+    if (ua.includes('loon')) return 'loon';
+    
+    // Shadowrocket
+    if (ua.includes('shadowrocket')) return 'surge'; // Shadowrocket 兼容 surge 格式
+    
+    // Stash
+    if (ua.includes('stash')) return 'clash'; // Stash 使用 clash 格式
+    
+    // sing-box
+    if (ua.includes('sing-box') || ua.includes('singbox')) return 'singbox';
+    
+    // V2Ray 系列
+    if (ua.includes('v2ray') || ua.includes('v2rayn') || ua.includes('v2rayng')) return 'v2ray';
+    
+    // Hiddify
+    if (ua.includes('hiddify')) return 'singbox'; // Hiddify 使用 sing-box 格式
+    
+    // Karing
+    if (ua.includes('karing')) return 'singbox'; // Karing 使用 sing-box 格式
+    
+    // 其他常见客户端
+    if (ua.includes('shadowsocks')) return 'v2ray';
+    if (ua.includes('trojan')) return 'v2ray';
+    
+    // 默认返回通用格式
+    return null;
+}
+
 export default {
 	async fetch(request, env, ctx) {
 		try {
@@ -420,15 +477,40 @@ export default {
 			// Trojan 密码配置
 			trojanPassword = getConfigValue('trojanPassword', env.trojanPassword || env.TROJANPASSWORD) || '';
 			
+			// VMess 协议配置
+			const vmessControl = getConfigValue('enableVmess', env.enableVmess || env.ENABLEVMESS);
+			if (vmessControl !== undefined && vmessControl !== '') {
+				enableVmess = vmessControl === 'yes' || vmessControl === true || vmessControl === 'true';
+			}
+			
 			// xhttp 协议配置
 			const xhttpControl = getConfigValue('enableXhttp', env.enableXhttp || env.ENABLEXHTTP);
 			if (xhttpControl !== undefined && xhttpControl !== '') {
 				enableXhttp = xhttpControl === 'yes' || xhttpControl === true || xhttpControl === 'true';
 			}
 			
+			// 订阅转换地址配置
+			subConverterUrl = getConfigValue('subConverterUrl', env.subConverterUrl || env.SUBCONVERTERURL) || 'https://url.v1.mk/sub';
+			
+			// 优选类型控制配置
+			const preferredDomainsControl = getConfigValue('enablePreferredDomains', env.enablePreferredDomains || env.ENABLEPREFERREDDOMAINS);
+			if (preferredDomainsControl !== undefined && preferredDomainsControl !== '') {
+				enablePreferredDomains = preferredDomainsControl !== 'no' && preferredDomainsControl !== false && preferredDomainsControl !== 'false';
+			}
+			
+			const preferredIPsControl = getConfigValue('enablePreferredIPs', env.enablePreferredIPs || env.ENABLEPREFERREDIPS);
+			if (preferredIPsControl !== undefined && preferredIPsControl !== '') {
+				enablePreferredIPs = preferredIPsControl !== 'no' && preferredIPsControl !== false && preferredIPsControl !== 'false';
+			}
+			
+			const githubIPsControl = getConfigValue('enableGithubIPs', env.enableGithubIPs || env.ENABLEGITHUBIPS);
+			if (githubIPsControl !== undefined && githubIPsControl !== '') {
+				enableGithubIPs = githubIPsControl !== 'no' && githubIPsControl !== false && githubIPsControl !== 'false';
+			}
+			
 			// 确保至少有一个协议启用
-			if (!enableVless && !enableTrojan && !enableXhttp) {
-				enableVless = true;
+			if (!enableVless && !enableTrojan && !enableVmess && !enableXhttp) {
+				enableVmess = true;
 			}
 
 			// 优先使用KV配置，然后使用环境变量，如果都没有则使用默认URL
@@ -869,6 +951,50 @@ export default {
 						}
 					}
 				}
+				// 智能订阅 - 根据 UA 自动识别客户端类型
+				if (url.pathname.includes('/auto')) {
+					const pathParts = url.pathname.split('/').filter(p => p);
+					// 支持 /{uuid}/auto 格式
+					if (pathParts.length >= 2 && pathParts[pathParts.length - 1] === 'auto') {
+						const user = pathParts[0];
+						if (isValidFormat(user)) {
+							if (user === authToken) {
+								// 获取客户端 UA
+								const userAgent = request.headers.get('User-Agent') || '';
+								const clientType = detectClientFromUA(userAgent);
+								
+								if (clientType && clientType !== 'v2ray') {
+									// 需要转换格式，获取原始订阅并转换
+									const workerDomain = url.hostname;
+									const baseSubscriptionUrl = `https://${workerDomain}/${user}/sub`;
+									const encodedUrl = encodeURIComponent(baseSubscriptionUrl);
+									const converterUrl = `${subConverterUrl}?target=${clientType}&url=${encodedUrl}&insert=false`;
+									
+									// 转发到订阅转换服务
+									const convertResponse = await fetch(converterUrl, {
+										headers: {
+											'User-Agent': 'Cloudflare Worker'
+										}
+									});
+									
+									return new Response(convertResponse.body, {
+										status: convertResponse.status,
+										headers: convertResponse.headers
+									});
+								} else {
+									// V2Ray 格式或无法识别，返回原始订阅
+									return await handleSubscriptionRequest(request, user, url);
+								}
+							} else {
+								return new Response(JSON.stringify({ error: 'UUID错误' }), { 
+									status: 403,
+									headers: { 'Content-Type': 'application/json' }
+								});
+							}
+						}
+					}
+				}
+				
 				if (url.pathname.includes('/sub')) {
 					const pathParts = url.pathname.split('/');
 					if (pathParts.length === 2 && pathParts[1] === 'sub') {
@@ -914,6 +1040,9 @@ async function handleSubscriptionRequest(request, user, url = null) {
         if (enableTrojan) {
             finalLinks.push(...await generateTrojanLinksFromSource(list, user, workerDomain));
         }
+        if (enableVmess) {
+            finalLinks.push(...generateVmessLinksFromSource(list, user, workerDomain));
+        }
         if (enableXhttp) {
             finalLinks.push(...generateXhttpLinksFromSource(list, user, workerDomain));
         }
@@ -949,24 +1078,61 @@ async function handleSubscriptionRequest(request, user, url = null) {
     if (disablePreferred) {
     } else if (hasCustomPreferred) {
         // 使用yx配置的优选IP（包含API添加的）
-        if (customPreferredIPs.length > 0) {
+        if (customPreferredIPs.length > 0 && enablePreferredIPs) {
             await addNodesFromList(customPreferredIPs);
         }
         
-        if (customPreferredDomains.length > 0) {
+        if (customPreferredDomains.length > 0 && enablePreferredDomains) {
             const customDomainList = customPreferredDomains.map(d => ({ ip: d.domain, isp: d.name || d.domain }));
             await addNodesFromList(customDomainList);
         }
     } else {
-        const domainList = directDomains.map(d => ({ ip: d.domain, isp: d.name || d.domain }));
-        await addNodesFromList(domainList);
+        // 优选域名
+        if (enablePreferredDomains) {
+            const domainList = directDomains.map(d => ({ ip: d.domain, isp: d.name || d.domain }));
+            await addNodesFromList(domainList);
+        }
 
-        const defaultURL = 'https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt';
-        if (preferredIPsURL === defaultURL) {
+        // 优选 IP
+        if (enablePreferredIPs) {
+            const defaultURL = 'https://raw.githubusercontent.com/qwer-search/bestip/refs/heads/main/kejilandbestip.txt';
+            if (preferredIPsURL === defaultURL) {
+                try {
+                    const dynamicIPList = await fetchDynamicIPs();
+                    if (dynamicIPList.length > 0) {
+                        await addNodesFromList(dynamicIPList);
+                    }
+                } catch (error) {
+                    if (!currentWorkerRegion) {
+                        currentWorkerRegion = await detectWorkerRegion(request);
+                    }
+                    
+                    const bestBackupIP = await getBestBackupIP(currentWorkerRegion);
+                    if (bestBackupIP) {
+                        fallbackAddress = bestBackupIP.domain;
+                        fallbackPort = bestBackupIP.port.toString();
+                        
+                        const backupList = [{ ip: fallbackAddress, isp: 'ProxyIP-' + currentWorkerRegion }];
+                        await addNodesFromList(backupList);
+                    }
+                }
+            }
+        }
+
+        // GitHub 默认优选
+        if (enableGithubIPs) {
             try {
-                const dynamicIPList = await fetchDynamicIPs();
-                if (dynamicIPList.length > 0) {
-                    await addNodesFromList(dynamicIPList);
+                const newIPList = await fetchAndParseNewIPs();
+                if (newIPList.length > 0) {
+                    if (enableVless) {
+                        finalLinks.push(...generateLinksFromNewIPs(newIPList, user, workerDomain));
+                    }
+                    if (enableTrojan) {
+                        finalLinks.push(...await generateTrojanLinksFromNewIPs(newIPList, user, workerDomain));
+                    }
+                    if (enableVmess) {
+                        finalLinks.push(...generateVmessLinksFromNewIPs(newIPList, user, workerDomain));
+                    }
                 }
             } catch (error) {
                 if (!currentWorkerRegion) {
@@ -981,31 +1147,6 @@ async function handleSubscriptionRequest(request, user, url = null) {
                     const backupList = [{ ip: fallbackAddress, isp: 'ProxyIP-' + currentWorkerRegion }];
                     await addNodesFromList(backupList);
                 }
-            }
-        }
-
-        try {
-            const newIPList = await fetchAndParseNewIPs();
-            if (newIPList.length > 0) {
-                if (enableVless) {
-                    finalLinks.push(...generateLinksFromNewIPs(newIPList, user, workerDomain));
-                }
-                if (enableTrojan) {
-                    finalLinks.push(...await generateTrojanLinksFromNewIPs(newIPList, user, workerDomain));
-                }
-            }
-        } catch (error) {
-            if (!currentWorkerRegion) {
-                currentWorkerRegion = await detectWorkerRegion(request);
-            }
-            
-            const bestBackupIP = await getBestBackupIP(currentWorkerRegion);
-            if (bestBackupIP) {
-                fallbackAddress = bestBackupIP.domain;
-                fallbackPort = bestBackupIP.port.toString();
-                
-                const backupList = [{ ip: fallbackAddress, isp: 'ProxyIP-' + currentWorkerRegion }];
-                await addNodesFromList(backupList);
             }
         }
     }
@@ -1200,6 +1341,72 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
                 });
                 links.push(`trojan://${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
             }
+        });
+    });
+    return links;
+}
+
+// VMess 链接生成函数
+function generateVmessLinksFromSource(list, user, workerDomain) {
+    // Cloudflare支持的端口
+    const CF_HTTP_PORTS = [80, 8080, 8880, 2052, 2082, 2086, 2095];
+    const CF_HTTPS_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
+    
+    const defaultHttpsPorts = [443];
+    const defaultHttpPorts = disableNonTLS ? [] : [80];
+    const links = [];
+    const wsPath = '/';
+
+    list.forEach(item => {
+        const nodeNameBase = item.isp.replace(/\s/g, '_');
+        const address = item.ip;
+        
+        let portsToGenerate = [];
+        
+        if (item.port) {
+            const port = item.port;
+            
+            if (CF_HTTPS_PORTS.includes(port)) {
+                portsToGenerate.push({ port: port, tls: true });
+            } else if (CF_HTTP_PORTS.includes(port)) {
+                if (!disableNonTLS) {
+                    portsToGenerate.push({ port: port, tls: false });
+                }
+            } else {
+                portsToGenerate.push({ port: port, tls: true });
+            }
+        } else {
+            defaultHttpsPorts.forEach(port => {
+                portsToGenerate.push({ port: port, tls: true });
+            });
+            defaultHttpPorts.forEach(port => {
+                portsToGenerate.push({ port: port, tls: false });
+            });
+        }
+
+        // 生成 VMess 节点
+        portsToGenerate.forEach(({ port, tls }) => {
+            const wsNodeName = tls ? `${nodeNameBase}-${port}-VMess-WS-TLS` : `${nodeNameBase}-${port}-VMess-WS`;
+            
+            const vmessConfig = {
+                v: "2",
+                ps: wsNodeName,
+                add: address,
+                port: port.toString(),
+                id: user,
+                aid: "0",
+                net: "ws",
+                type: "none",
+                host: workerDomain,
+                path: wsPath,
+                tls: tls ? "tls" : "",
+                sni: tls ? workerDomain : "",
+                alpn: ""
+            };
+            
+            const vmessJson = JSON.stringify(vmessConfig);
+            const vmessBase64 = btoa(vmessJson);
+            links.push(`vmess://${vmessBase64}`);
         });
     });
     return links;
@@ -1745,6 +1952,26 @@ async function handleSubscriptionPage(request, user = null) {
             <p class="subtitle">多客户端支持 • 智能优选 • 一键生成</p>
         </div>
         <div class="card">
+            <h2 class="card-title">[ 智能订阅 ]</h2>
+            <div style="padding: 20px; background: rgba(0, 40, 0, 0.6); border: 2px solid #00ff00; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);">
+                <div style="color: #44ff44; font-size: 1.1rem; margin-bottom: 15px; font-weight: bold; text-shadow: 0 0 5px #44ff44;">
+                    🚀 通用订阅链接（自动识别客户端）
+                </div>
+                <div style="background: rgba(0, 0, 0, 0.8); padding: 15px; border: 1px solid #00ff00; border-radius: 5px; word-break: break-all; font-family: 'Courier New', monospace; color: #00ff00; margin-bottom: 15px; cursor: pointer;" onclick="copyAutoLink()" id="autoSubLink">
+                    ${url.origin}/${user}/auto
+                </div>
+                <button class="generate-btn" onclick="copyAutoLink()" style="width: 100%; margin-bottom: 15px;">
+                    📋 复制智能订阅链接
+                </button>
+                <div style="color: #00aa00; font-size: 0.9rem; line-height: 1.6;">
+                    <strong style="color: #44ff44;">使用说明：</strong><br>
+                    • 将此链接添加到任意代理客户端<br>
+                    • 服务器会自动识别客户端类型<br>
+                    • 自动返回对应格式的订阅配置<br>
+                    • 支持：Clash、Surge、Sing-box、Loon、V2Ray 等<br>
+                    • <strong style="color: #ffaa00;">推荐使用此链接，一次配置，多端通用</strong>
+                </div>
+            </div>
             <h2 class="card-title">[ 选择客户端 ]</h2>
             <div class="client-grid">
                 <button class="client-btn" onclick="generateClientLink(atob('Y2xhc2g='))">CLASH</button>
@@ -1804,14 +2031,20 @@ async function handleSubscriptionPage(request, user = null) {
                         <div style="padding: 15px; background: rgba(0, 20, 0, 0.6); border: 1px solid #00ff00; border-radius: 5px;">
                             <div style="margin-bottom: 10px;">
                                 <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
-                                    <input type="checkbox" id="enableVless" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                    <input type="checkbox" id="enableVless" style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
                                     <span style="font-size: 1.1rem;">启用 VLESS 协议</span>
                                 </label>
                             </div>
                             <div style="margin-bottom: 10px;">
                                 <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
-                                    <input type="checkbox" id="enableTrojan" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                    <input type="checkbox" id="enableTrojan" style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
                                     <span style="font-size: 1.1rem;">启用 Trojan 协议</span>
+                                </label>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
+                                    <input type="checkbox" id="enableVmess" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                    <span style="font-size: 1.1rem;">启用 VMess 协议</span>
                                 </label>
                             </div>
                             <div style="margin-bottom: 10px;">
@@ -1825,7 +2058,36 @@ async function handleSubscriptionPage(request, user = null) {
                                 <input type="text" id="trojanPassword" placeholder="留空则自动使用 UUID" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 13px;">
                                 <small style="color: #00aa00; font-size: 0.8rem; display: block; margin-top: 5px;">设置自定义 Trojan 密码。留空则使用 UUID。客户端会自动对密码进行 SHA224 哈希。</small>
                             </div>
-                            <small style="color: #00aa00; font-size: 0.85rem; display: block; margin-top: 10px;">可以同时启用多个协议。订阅将生成选中协议的节点。<br>• VLESS WS: 基于 WebSocket 的标准协议<br>• Trojan: 使用 SHA224 密码认证<br>• xhttp: 基于 HTTP POST 的伪装协议（需要绑定自定义域名并开启 gRPC）</small>
+                            <small style="color: #00aa00; font-size: 0.85rem; display: block; margin-top: 10px;">可以同时启用多个协议。订阅将生成选中协议的节点。<br>• VLESS WS: 基于 WebSocket 的标准协议<br>• Trojan: 使用 SHA224 密码认证<br>• VMess: V2Ray 经典协议，兼容性强<br>• xhttp: 基于 HTTP POST 的伪装协议（需要绑定自定义域名并开启 gRPC）</small>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">订阅转换地址:</label>
+                        <input type="text" id="subConverterUrl" placeholder="默认: https://url.v1.mk/sub" style="width: 100%; padding: 12px; background: rgba(0, 0, 0, 0.8); border: 2px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 14px;">
+                        <small style="color: #00aa00; font-size: 0.85rem;">自定义订阅转换API地址，留空则使用默认地址</small>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-weight: bold; text-shadow: 0 0 3px #00ff00;">内置优选类型:</label>
+                        <div style="padding: 15px; background: rgba(0, 20, 0, 0.6); border: 1px solid #00ff00; border-radius: 5px;">
+                            <div style="margin-bottom: 10px;">
+                                <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
+                                    <input type="checkbox" id="enablePreferredDomains" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                    <span style="font-size: 1.1rem;">启用优选域名</span>
+                                </label>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
+                                    <input type="checkbox" id="enablePreferredIPs" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                    <span style="font-size: 1.1rem;">启用优选 IP</span>
+                                </label>
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
+                                    <input type="checkbox" id="enableGithubIPs" checked style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                    <span style="font-size: 1.1rem;">启用 GitHub 默认优选</span>
+                                </label>
+                            </div>
+                            <small style="color: #00aa00; font-size: 0.85rem; display: block; margin-top: 10px;">控制订阅中包含哪些内置优选节点。默认全部启用。</small>
                         </div>
                     </div>
                     <div style="margin-bottom: 15px;">
@@ -1913,6 +2175,19 @@ async function handleSubscriptionPage(request, user = null) {
         </div>
     </div>
     <script>
+        // 订阅转换地址（从服务器配置注入）
+        var SUB_CONVERTER_URL = "${subConverterUrl}";
+        
+        // 复制智能订阅链接
+        function copyAutoLink() {
+            var autoLink = document.getElementById('autoSubLink').textContent.trim();
+            navigator.clipboard.writeText(autoLink).then(function() {
+                alert('✅ 智能订阅链接已复制！\\n\\n可以直接添加到任意代理客户端，服务器会自动识别客户端类型并返回对应格式的订阅。\\n\\n支持的客户端：\\n• Clash / Clash Meta / Clash Verge\\n• Surge\\n• Sing-box / Hiddify / Karing\\n• Loon\\n• Shadowrocket / Quantumult X\\n• V2Ray / V2RayN / V2RayNG');
+            }).catch(function(err) {
+                alert('复制失败，请手动复制链接');
+            });
+        }
+        
         function generateClientLink(clientType) {
             var currentUrl = window.location.href;
             var subscriptionUrl = currentUrl + "/sub";
@@ -1925,7 +2200,7 @@ async function handleSubscriptionPage(request, user = null) {
                 });
             } else {
                 var encodedUrl = encodeURIComponent(subscriptionUrl);
-                var apiUrl = "https://url.v1.mk/sub?target=" + clientType + "&url=" + encodedUrl + "&insert=false";
+                var apiUrl = SUB_CONVERTER_URL + "?target=" + clientType + "&url=" + encodedUrl + "&insert=false";
                 document.getElementById("clientSubscriptionUrl").textContent = apiUrl;
                 document.getElementById("clientSubscriptionUrl").style.display = "block";
                 navigator.clipboard.writeText(apiUrl).then(function() {
@@ -2196,10 +2471,15 @@ async function handleSubscriptionPage(request, user = null) {
                 
                 // 更新表单值
                 document.getElementById('wkRegion').value = config.wk || '';
-                document.getElementById('enableVless').checked = config.enableVless !== 'no';
-                document.getElementById('enableTrojan').checked = config.enableTrojan === 'yes' || config.enableTrojan !== 'no';
+                document.getElementById('enableVless').checked = config.enableVless === 'yes';
+                document.getElementById('enableTrojan').checked = config.enableTrojan === 'yes';
+                document.getElementById('enableVmess').checked = config.enableVmess === 'yes' || (config.enableVmess !== 'no' && !config.enableVmess);
                 document.getElementById('enableXhttp').checked = config.enableXhttp === 'yes';
                 document.getElementById('trojanPassword').value = config.trojanPassword || '';
+                document.getElementById('subConverterUrl').value = config.subConverterUrl || '';
+                document.getElementById('enablePreferredDomains').checked = config.enablePreferredDomains !== 'no';
+                document.getElementById('enablePreferredIPs').checked = config.enablePreferredIPs !== 'no';
+                document.getElementById('enableGithubIPs').checked = config.enableGithubIPs !== 'no';
                 document.getElementById('customIP').value = config.p || '';
                 document.getElementById('preferredIPs').value = config.yx || '';
                 document.getElementById('preferredIPsURL').value = config.yxURL || '';
@@ -2380,8 +2660,13 @@ async function handleSubscriptionPage(request, user = null) {
                     const configData = {
                         enableVless: document.getElementById('enableVless').checked ? 'yes' : 'no',
                         enableTrojan: document.getElementById('enableTrojan').checked ? 'yes' : 'no',
+                        enableVmess: document.getElementById('enableVmess').checked ? 'yes' : 'no',
                         enableXhttp: document.getElementById('enableXhttp').checked ? 'yes' : 'no',
                         trojanPassword: document.getElementById('trojanPassword').value,
+                        subConverterUrl: document.getElementById('subConverterUrl').value,
+                        enablePreferredDomains: document.getElementById('enablePreferredDomains').checked ? 'yes' : 'no',
+                        enablePreferredIPs: document.getElementById('enablePreferredIPs').checked ? 'yes' : 'no',
+                        enableGithubIPs: document.getElementById('enableGithubIPs').checked ? 'yes' : 'no',
                         p: document.getElementById('customIP').value,
                         yx: document.getElementById('preferredIPs').value,
                         yxURL: document.getElementById('preferredIPsURL').value,
@@ -2391,6 +2676,7 @@ async function handleSubscriptionPage(request, user = null) {
                     // 确保至少选择一个协议
                     if (!document.getElementById('enableVless').checked && 
                         !document.getElementById('enableTrojan').checked && 
+                        !document.getElementById('enableVmess').checked && 
                         !document.getElementById('enableXhttp').checked) {
                         alert('至少需要启用一个协议！');
                         return;
@@ -3198,6 +3484,90 @@ async function generateTrojanLinksFromNewIPs(list, user, workerDomain) {
             const wsNodeName = `${nodeName}-${port}-Trojan-WS-TLS`;
             const link = `trojan://${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
+        }
+    });
+    return links;
+}
+
+// VMess 链接生成函数（从 NewIPs）
+function generateVmessLinksFromNewIPs(list, user, workerDomain) {
+    // Cloudflare支持的端口
+    const CF_HTTP_PORTS = [80, 8080, 8880, 2052, 2082, 2086, 2095];
+    const CF_HTTPS_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
+    
+    const links = [];
+    const wsPath = '/?ed=2048';
+    
+    list.forEach(item => {
+        const nodeName = item.name.replace(/\s/g, '_');
+        const port = item.port;
+        const address = item.ip;
+        
+        if (CF_HTTPS_PORTS.includes(port)) {
+            // CF HTTPS端口，生成TLS节点
+            const wsNodeName = `${nodeName}-${port}-VMess-WS-TLS`;
+            const vmessConfig = {
+                v: "2",
+                ps: wsNodeName,
+                add: address,
+                port: port.toString(),
+                id: user,
+                aid: "0",
+                net: "ws",
+                type: "none",
+                host: workerDomain,
+                path: wsPath,
+                tls: "tls",
+                sni: workerDomain,
+                alpn: ""
+            };
+            const vmessJson = JSON.stringify(vmessConfig);
+            const vmessBase64 = btoa(vmessJson);
+            links.push(`vmess://${vmessBase64}`);
+        } else if (CF_HTTP_PORTS.includes(port)) {
+            // CF HTTP端口，生成非TLS节点（除非启用了disableNonTLS）
+            if (!disableNonTLS) {
+                const wsNodeName = `${nodeName}-${port}-VMess-WS`;
+                const vmessConfig = {
+                    v: "2",
+                    ps: wsNodeName,
+                    add: address,
+                    port: port.toString(),
+                    id: user,
+                    aid: "0",
+                    net: "ws",
+                    type: "none",
+                    host: workerDomain,
+                    path: wsPath,
+                    tls: "",
+                    sni: "",
+                    alpn: ""
+                };
+                const vmessJson = JSON.stringify(vmessConfig);
+                const vmessBase64 = btoa(vmessJson);
+                links.push(`vmess://${vmessBase64}`);
+            }
+        } else {
+            // 非CF标准端口，只生成TLS节点
+            const wsNodeName = `${nodeName}-${port}-VMess-WS-TLS`;
+            const vmessConfig = {
+                v: "2",
+                ps: wsNodeName,
+                add: address,
+                port: port.toString(),
+                id: user,
+                aid: "0",
+                net: "ws",
+                type: "none",
+                host: workerDomain,
+                path: wsPath,
+                tls: "tls",
+                sni: workerDomain,
+                alpn: ""
+            };
+            const vmessJson = JSON.stringify(vmessConfig);
+            const vmessBase64 = btoa(vmessJson);
+            links.push(`vmess://${vmessBase64}`);
         }
     });
     return links;
