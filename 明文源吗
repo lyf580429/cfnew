@@ -508,32 +508,10 @@ export default {
 				customPreferredDomains = [];
 			}
 
-			const url = new URL(request.url);
+		const url = new URL(request.url);
 
-			// xhttp POST 请求处理
-			if (request.method === 'POST' && enableXhttp) {
-				const r = await handleXhttpPost(request);
-				if (r) {
-					ctx.waitUntil(r.closed);
-					return new Response(r.readable, {
-						headers: {
-							'X-Accel-Buffering': 'no',
-							'Cache-Control': 'no-store',
-							Connection: 'keep-alive',
-							'User-Agent': 'Go-http-client/2.0',
-							'Content-Type': 'application/grpc',
-						},
-					});
-				}
-				return new Response('Internal Server Error', { status: 500 });
-			}
-
-			if (request.headers.get('Upgrade') === 'websocket') {
-				return await handleWsRequest(request);
-			}
-			
-			// 配置管理API路由（支持GET和POST）
-			if (url.pathname.includes('/api/config')) {
+		// 配置管理API路由（支持GET和POST）- 优先处理，避免被 xhttp 拦截
+		if (url.pathname.includes('/api/config')) {
 				const pathParts = url.pathname.split('/').filter(p => p);
 				// 查找UUID - 应该在 api 之前
 				const apiIndex = pathParts.indexOf('api');
@@ -555,30 +533,52 @@ export default {
 				});
 			}
 			
-			// 优选IP管理API路由
-			if (url.pathname.includes('/api/preferred-ips')) {
-				const pathParts = url.pathname.split('/').filter(p => p);
-				// 查找UUID - 应该在 api 之前
-				const apiIndex = pathParts.indexOf('api');
-				if (apiIndex > 0) {
-					const user = pathParts[apiIndex - 1];
-					if (isValidFormat(user) && user === authToken) {
-						return await handlePreferredIPsAPI(request);
-					} else if (isValidFormat(user)) {
-						return new Response(JSON.stringify({ error: 'UUID错误' }), { 
-							status: 403,
-							headers: { 'Content-Type': 'application/json' }
-						});
-					}
+		// 优选IP管理API路由
+		if (url.pathname.includes('/api/preferred-ips')) {
+			const pathParts = url.pathname.split('/').filter(p => p);
+			// 查找UUID - 应该在 api 之前
+			const apiIndex = pathParts.indexOf('api');
+			if (apiIndex > 0) {
+				const user = pathParts[apiIndex - 1];
+				if (isValidFormat(user) && user === authToken) {
+					return await handlePreferredIPsAPI(request);
+				} else if (isValidFormat(user)) {
+					return new Response(JSON.stringify({ error: 'UUID错误' }), { 
+						status: 403,
+						headers: { 'Content-Type': 'application/json' }
+					});
 				}
-				// 如果路径格式不正确，返回JSON错误
-				return new Response(JSON.stringify({ error: '无效的API路径' }), { 
-					status: 404,
-					headers: { 'Content-Type': 'application/json' }
+			}
+			// 如果路径格式不正确，返回JSON错误
+			return new Response(JSON.stringify({ error: '无效的API路径' }), { 
+				status: 404,
+				headers: { 'Content-Type': 'application/json' }
+			});
+		}
+		
+		// xhttp POST 请求处理（在 API 路由之后）
+		if (request.method === 'POST' && enableXhttp) {
+			const r = await handleXhttpPost(request);
+			if (r) {
+				ctx.waitUntil(r.closed);
+				return new Response(r.readable, {
+					headers: {
+						'X-Accel-Buffering': 'no',
+						'Cache-Control': 'no-store',
+						Connection: 'keep-alive',
+						'User-Agent': 'Go-http-client/2.0',
+						'Content-Type': 'application/grpc',
+					},
 				});
 			}
-			
-			if (request.method === 'GET') {
+			return new Response('Internal Server Error', { status: 500 });
+		}
+
+		if (request.headers.get('Upgrade') === 'websocket') {
+			return await handleWsRequest(request);
+		}
+		
+		if (request.method === 'GET') {
 				if (url.pathname === '/region') {
 					// 优先使用KV配置，然后使用环境变量
 					const customIP = getConfigValue('p', env.p || env.P);
