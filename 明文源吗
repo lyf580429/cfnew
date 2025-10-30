@@ -149,6 +149,7 @@ async function saveKVConfig() {
         await kvStore.put('c', JSON.stringify(kvConfig));
     } catch (error) {
         console.error('保存KV配置失败:', error);
+        throw error; // 重新抛出错误，让上层 catch 捕获
     }
 }
 
@@ -2355,7 +2356,15 @@ async function handleSubscriptionPage(request, user = null) {
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.log('❌ 保存失败，状态码:', response.status, '错误:', errorText);
-                    showStatus('保存失败: ' + errorText, 'error');
+                    
+                    // 尝试解析 JSON 错误信息
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        showStatus(errorData.message || '保存失败', 'error');
+                    } catch (parseError) {
+                        // 如果不是 JSON，直接显示文本
+                        showStatus('保存失败: ' + errorText, 'error');
+                    }
                     return;
                 }
                 
@@ -2429,7 +2438,15 @@ async function handleSubscriptionPage(request, user = null) {
                     
                     if (!response.ok) {
                         const errorText = await response.text();
-                        showStatus('重置失败: ' + errorText, 'error');
+                        
+                        // 尝试解析 JSON 错误信息
+                        try {
+                            const errorData = JSON.parse(errorText);
+                            showStatus(errorData.message || '重置失败', 'error');
+                        } catch (parseError) {
+                            // 如果不是 JSON，直接显示文本
+                            showStatus('重置失败: ' + errorText, 'error');
+                        }
                         return;
                     }
                     
