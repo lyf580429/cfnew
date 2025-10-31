@@ -44,41 +44,41 @@ jobs:
             process.exit(1);
           }
 
-          // --- 最强混淆配置：无明文内容（性能优化版） ---
+          // --- 轻量级混淆配置：最小化性能影响 ---
           const obfuscationOptions = {
               compact: true,
-              // 字符串加密：100%无明文（Base64 + RC4双重编码）
+              // 控制流扁平化：关闭或极低阈值以最大化性能
+              controlFlowFlattening: false,  // 完全关闭控制流扁平化以提升性能
+              controlFlowFlatteningThreshold: 0,
+              deadCodeInjection: false,
+              // 字符串数组：仅保留基础混淆，降低编码开销
               stringArray: true,
-              stringArrayEncoding: ['base64', 'rc4'],
-              stringArrayThreshold: 1.0,
-              stringArrayRotate: true,
-              stringArrayShuffle: true,
-              stringArrayWrappersCount: 1,
-              stringArrayWrappersChainedCalls: true,
-              stringArrayWrappersParametersMaxCount: 2,
-              // 变量名/函数名混淆：消除所有标识符明文
+              stringArrayEncoding: [],  // 关闭编码，仅使用字符串数组存储
+              stringArrayThreshold: 0.5,  // 降至0.5，50%的字符串保持原样
+              stringArrayRotate: false,  // 关闭旋转以减少开销
+              stringArrayShuffle: false,  // 关闭洗牌以减少开销
+              stringArrayWrappersCount: 1,  // 降至1，最小包装层数
+              stringArrayWrappersChainedCalls: false,  // 关闭链式调用
+              stringArrayWrappersParametersMaxCount: 2,  // 降至2
               renameGlobals: true,
-              identifierNamesGenerator: 'mangled-shuffled',
-              // 属性名混淆：消除对象属性明文
-              renameProperties: true,
-              renamePropertiesMode: 'unsafe',
-              // 数字混淆：消除数字明文
-              numbersToExpressions: true,
-              // 对象键混淆：消除对象键明文
-              transformObjectKeys: true,
-              // 字符串分割：增强混淆
-              splitStrings: true,
-              splitStringsChunkLength: 5,
-              // 控制流混淆：适度使用保证性能
-              controlFlowFlattening: true,
-              controlFlowFlatteningThreshold: 0.75,
-              // Unicode转义序列
-              unicodeEscapeSequence: true,
-              // 禁用控制台输出
+              identifierNamesGenerator: 'hexadecimal',  // 使用更快的十六进制生成器
+              identifierNamesCache: null,
+              identifiersPrefix: '',
+              renameProperties: false,
+              renamePropertiesMode: 'safe',
+              ignoreImports: false,
+              target: 'browser',
+              numbersToExpressions: false,  // 关闭数字转表达式
+              simplify: true,  // 启用简化以优化代码
+              splitStrings: false,  // 关闭字符串分割以减少开销
+              splitStringsChunkLength: 0,
+              transformObjectKeys: false,  // 关闭对象键转换
+              unicodeEscapeSequence: false,  // 关闭Unicode转义
+              selfDefending: false,  // 关闭自我防护机制
+              debugProtection: false,
+              debugProtectionInterval: 0,
               disableConsoleOutput: true,
-              // 基础配置
-              simplify: false,
-              target: 'browser'
+              domainLock: []
           };
 
           const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
