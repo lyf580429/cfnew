@@ -53,33 +53,32 @@ jobs:
               stringArrayThreshold: 1.0,
               stringArrayRotate: true,
               stringArrayShuffle: true,
-              stringArrayWrappersCount: 1,
-              stringArrayWrappersChainedCalls: false,
-              stringArrayWrappersParametersMaxCount: 2,
+              stringArrayWrappersCount: 2,
+              stringArrayWrappersChainedCalls: true,
+              stringArrayWrappersParametersMaxCount: 3,
               // 变量名/函数名混淆：消除所有标识符明文
               renameGlobals: true,
               identifierNamesGenerator: 'mangled-shuffled',
-              // 属性名混淆：关闭以避免破坏Worker API（保持无明文）
-              renameProperties: false,
+              // 属性名混淆：消除对象属性明文
+              renameProperties: true,
+              renamePropertiesMode: 'unsafe',
               // 数字混淆：消除数字明文
               numbersToExpressions: true,
-              // 对象键混淆：关闭以避免破坏Response等对象（字符串已加密）
-              transformObjectKeys: false,
-              // 字符串分割：减少分割次数提升性能
+              // 对象键混淆：消除对象键明文
+              transformObjectKeys: true,
+              // 字符串分割：增强混淆
               splitStrings: true,
-              splitStringsChunkLength: 10,
-              // 控制流混淆：适度使用
+              splitStringsChunkLength: 5,
+              // 控制流混淆：适度使用保证性能
               controlFlowFlattening: true,
-              controlFlowFlatteningThreshold: 0.5,
+              controlFlowFlatteningThreshold: 0.75,
+              // Unicode转义序列
+              unicodeEscapeSequence: true,
+              // 禁用控制台输出
+              disableConsoleOutput: true,
               // 基础配置
               simplify: false,
-              target: 'browser',
-              // 保护Worker API关键属性
-              reservedNames: [
-                  'Response', 'Request', 'Headers', 'fetch', 'addEventListener',
-                  'waitUntil', 'passThroughOnException', 'respondWith',
-                  'event', 'env', 'ctx', 'caches', 'globalThis', 'self'
-              ]
+              target: 'browser'
           };
 
           const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
