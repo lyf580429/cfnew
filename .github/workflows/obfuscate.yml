@@ -44,7 +44,7 @@ jobs:
             process.exit(1);
           }
 
-          // --- 仅RC4加密：确保无明文 ---
+          // --- 仅RC4加密：确保无明文，性能优化 ---
           const obfuscationOptions = {
               compact: true,
               stringArray: true,
@@ -53,17 +53,7 @@ jobs:
               stringArrayRotate: true,
               stringArrayShuffle: true,
               stringArrayIndexesType: ['hexadecimal-number'],
-              stringArrayIndexShift: true,
-              stringArrayWrappersCount: 2,
-              stringArrayWrappersChainedCalls: true,
-              stringArrayWrappersParametersMaxCount: 4,
-              stringArrayCallsTransform: true,
-              stringArrayCallsTransformThreshold: 1.0,
-              splitStrings: true,
-              splitStringsChunkLength: 10,
-              unicodeEscapeSequence: true,
               simplify: false,
-              ignoreImports: false,
               target: 'browser'
           };
 
