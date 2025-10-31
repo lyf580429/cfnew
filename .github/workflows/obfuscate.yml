@@ -44,11 +44,11 @@ jobs:
             process.exit(1);
           }
 
-          // --- 仅RC4加密：确保无明文，性能优化 ---
+          // --- Base64 + RC4双重加密：确保无明文，性能优化 ---
           const obfuscationOptions = {
               compact: true,
               stringArray: true,
-              stringArrayEncoding: ['rc4'],
+              stringArrayEncoding: ['base64', 'rc4'],
               stringArrayThreshold: 1.0,
               stringArrayRotate: true,
               stringArrayShuffle: true,
