@@ -53,9 +53,9 @@ jobs:
               stringArrayThreshold: 1.0,
               stringArrayRotate: true,
               stringArrayShuffle: true,
-              stringArrayWrappersCount: 2,
+              stringArrayWrappersCount: 1,
               stringArrayWrappersChainedCalls: true,
-              stringArrayWrappersParametersMaxCount: 3,
+              stringArrayWrappersParametersMaxCount: 2,
               // 变量名/函数名混淆：消除所有标识符明文
               renameGlobals: true,
               identifierNamesGenerator: 'mangled-shuffled',
