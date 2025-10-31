@@ -44,7 +44,7 @@ jobs:
             process.exit(1);
           }
 
-          // --- 最强混淆配置：无明文内容（极致性能优化版） ---
+          // --- 最强混淆配置：无明文内容（性能优化版） ---
           const obfuscationOptions = {
               compact: true,
               // 字符串加密：100%无明文（Base64 + RC4双重编码）
@@ -59,24 +59,27 @@ jobs:
               // 变量名/函数名混淆：消除所有标识符明文
               renameGlobals: true,
               identifierNamesGenerator: 'mangled-shuffled',
-              // 属性名混淆：消除对象属性明文（safe模式保证性能）
-              renameProperties: true,
-              renamePropertiesMode: 'safe',
+              // 属性名混淆：关闭以避免破坏Worker API（保持无明文）
+              renameProperties: false,
               // 数字混淆：消除数字明文
               numbersToExpressions: true,
-              // 对象键混淆：消除对象键明文
-              transformObjectKeys: true,
+              // 对象键混淆：关闭以避免破坏Response等对象（字符串已加密）
+              transformObjectKeys: false,
               // 字符串分割：减少分割次数提升性能
               splitStrings: true,
               splitStringsChunkLength: 10,
-              // 控制流混淆：进一步降低复杂度
+              // 控制流混淆：适度使用
               controlFlowFlattening: true,
               controlFlowFlatteningThreshold: 0.5,
-              // 禁用控制台输出
-              disableConsoleOutput: true,
               // 基础配置
               simplify: false,
-              target: 'browser'
+              target: 'browser',
+              // 保护Worker API关键属性
+              reservedNames: [
+                  'Response', 'Request', 'Headers', 'fetch', 'addEventListener',
+                  'waitUntil', 'passThroughOnException', 'respondWith',
+                  'event', 'env', 'ctx', 'caches', 'globalThis', 'self'
+              ]
           };
 
           const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
