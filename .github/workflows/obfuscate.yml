@@ -44,15 +44,31 @@ jobs:
             process.exit(1);
           }
 
-          // --- Base64 + RC4双重加密：确保无明文，性能优化 ---
+          // --- 完全无明文 + 性能优化 ---
           const obfuscationOptions = {
               compact: true,
+              // 字符串加密：100%无明文
               stringArray: true,
               stringArrayEncoding: ['base64', 'rc4'],
               stringArrayThreshold: 1.0,
               stringArrayRotate: true,
               stringArrayShuffle: true,
               stringArrayIndexesType: ['hexadecimal-number'],
+              // 变量名/函数名混淆：消除所有标识符明文
+              renameGlobals: true,
+              identifierNamesGenerator: 'mangled-shuffled',
+              identifiersPrefix: '',
+              // 属性名混淆：消除对象属性明文（safe模式保证性能）
+              renameProperties: true,
+              renamePropertiesMode: 'safe',
+              // 数字混淆：消除数字明文
+              numbersToExpressions: true,
+              // 对象键混淆：消除对象键明文
+              transformObjectKeys: true,
+              // 控制流混淆：打乱代码结构（适度使用保证性能）
+              controlFlowFlattening: true,
+              controlFlowFlatteningThreshold: 0.5,
+              // 其他优化
               simplify: false,
               target: 'browser'
           };
