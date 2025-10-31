@@ -49,7 +49,22 @@ jobs:
               compact: true,
               stringArray: true,
               stringArrayEncoding: ['rc4'],
-              stringArrayThreshold: 1.0
+              stringArrayThreshold: 1.0,
+              stringArrayRotate: true,
+              stringArrayShuffle: true,
+              stringArrayIndexesType: ['hexadecimal-number'],
+              stringArrayIndexShift: true,
+              stringArrayWrappersCount: 2,
+              stringArrayWrappersChainedCalls: true,
+              stringArrayWrappersParametersMaxCount: 4,
+              stringArrayCallsTransform: true,
+              stringArrayCallsTransformThreshold: 1.0,
+              splitStrings: true,
+              splitStringsChunkLength: 10,
+              unicodeEscapeSequence: true,
+              simplify: false,
+              ignoreImports: false,
+              target: 'browser'
           };
 
           const obfuscatedCode = JavaScriptObfuscator.obfuscate(originalCode, obfuscationOptions).getObfuscatedCode();
