@@ -918,8 +918,14 @@ export default {
 					return await handleSubscriptionRequest(request, at, url);
 				}
 				
+				if (url.pathname === cleanCustomPath + '/auto') {
+					const autoUrl = new URL(request.url);
+					autoUrl.searchParams.set('target', 'auto');
+					return await handleSubscriptionRequest(request, at, autoUrl);
+				}
+				
 				if (url.pathname.length > 1 && url.pathname !== '/') {
-					const user = url.pathname.replace(/\/$/, '').replace('/sub', '').substring(1);
+					const user = url.pathname.replace(/\/$/, '').replace('/sub', '').replace('/auto', '').substring(1);
 					if (isValidFormat(user)) {
 						return new Response(JSON.stringify({ 
 							error: '访问被拒绝',
@@ -962,6 +968,25 @@ export default {
 						}
 					}
 				}
+				
+				if (url.pathname.includes('/auto')) {
+					const pathParts = url.pathname.split('/');
+					if (pathParts.length === 2 && pathParts[1] === 'auto') {
+						const user = pathParts[0].substring(1);
+						if (isValidFormat(user)) {
+							if (user === at) {
+								const autoUrl = new URL(request.url);
+								autoUrl.searchParams.set('target', 'auto');
+								return await handleSubscriptionRequest(request, user, autoUrl);
+							} else {
+								return new Response(JSON.stringify({ error: 'UUID错误' }), { 
+									status: 403,
+									headers: { 'Content-Type': 'application/json' }
+								});
+							}
+						}
+					}
+				}
 				if (url.pathname.toLowerCase().includes(`/${subPath}`)) {
 					return await handleSubscriptionRequest(request, at);
 				}
@@ -980,12 +1005,64 @@ function generateQuantumultConfig(links) {
 	return btoa(links.join('\n'));
 }
 
+function detectClientTypeFromUA(userAgent) {
+    if (!userAgent) return null;
+    
+    const ua = userAgent.toLowerCase();
+    
+    if (ua.includes('clash')) {
+        return atob('Y2xhc2g=');
+    }
+    
+    if (ua.includes('surge')) {
+        if (ua.includes('surge4')) {
+            return atob('c3VyZ2U0');
+        } else if (ua.includes('surge3')) {
+            return atob('c3VyZ2Uz');
+        } else {
+            return atob('c3VyZ2Uy');
+        }
+    }
+    
+    if (ua.includes('quantumult') || ua.includes('quanx')) {
+        return atob('cXVhbnR1bXVsdA==');
+    }
+    
+    if (ua.includes('v2ray') || ua.includes('v2rayu') || ua.includes('v2rayn')) {
+        return atob('djJyYXk=');
+    }
+    
+    if (ua.includes('loon')) {
+        return atob('bG9vbg==');
+    }
+    
+    if (ua.includes('shadowrocket')) {
+        return atob('c3VyZ2Uz');
+    }
+    
+    if (ua.includes('shadowsocks') || ua.includes('ssr')) {
+        return atob('c3M=');
+    }
+    
+    return null;
+}
+
 async function handleSubscriptionRequest(request, user, url = null) {
     if (!url) url = new URL(request.url);
     
     const finalLinks = [];
     const workerDomain = url.hostname;
-    const target = url.searchParams.get('target') || 'base64';
+    let target = url.searchParams.get('target');
+    
+    if (!target || target === 'base64' || target === 'auto') {
+        const userAgent = request.headers.get('User-Agent') || '';
+        const detectedTarget = detectClientTypeFromUA(userAgent);
+        if (detectedTarget) {
+            target = detectedTarget;
+        } else {
+            target = 'base64';
+        }
+    }
 
     async function addNodesFromList(list) {
         if (ev) {
@@ -1199,7 +1276,8 @@ function generateLinksFromSource(list, user, workerDomain) {
                     fp: 'chrome', 
                     type: 'ws', 
                     host: workerDomain, 
-                    path: wsPath 
+                    path: wsPath,
+                    alpn: 'h3,h2,http/1.1'
                 });
                 links.push(`${proto}://${user}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
             } else {
@@ -1268,7 +1346,8 @@ async function generateTrojanLinksFromSource(list, user, workerDomain) {
                     fp: 'chrome', 
                     type: 'ws', 
                     host: workerDomain, 
-                    path: wsPath 
+                    path: wsPath,
+                    alpn: 'h3,h2,http/1.1'
                 });
                 links.push(`${atob('dHJvamFuOi8v')}${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
             } else {
@@ -1821,6 +1900,10 @@ async function handleSubscriptionPage(request, user = null) {
                 <button class="client-btn" onclick="generateClientLink(atob('bG9vbg=='))">LOON</button>
                 <button class="client-btn" onclick="generateClientLink(atob('cXVhbng='))">QUANTUMULT X</button>
                 <button class="client-btn" onclick="generateClientLink(atob('djJyYXk='))">V2RAY</button>
+                <button class="client-btn" onclick="generateClientLink(atob('c2hhZG93cm9ja2V0'))">小火箭</button>
+                <button class="client-btn" onclick="generateClientLink(atob('c3Rhc2g='))">STASH</button>
+                <button class="client-btn" onclick="generateClientLink(atob('bmVrb3JheQ=='))">NEKORAY</button>
+                <button class="client-btn" onclick="generateClientLink(atob('djJyYXluZw=='))">V2RAYNG</button>
             </div>
             <div class=atob('c3Vic2NyaXB0aW9uLXVybA==') id="clientSubscriptionUrl"></div>
         </div>
@@ -2023,6 +2106,51 @@ async function handleSubscriptionPage(request, user = null) {
         // 订阅转换地址（从服务器配置注入）
         var SUB_CONVERTER_URL = "${ scu }";
         
+        function tryOpenApp(schemeUrl, fallbackCallback, timeout) {
+            timeout = timeout || 2500;
+            var appOpened = false;
+            var callbackExecuted = false;
+            var startTime = Date.now();
+            
+            var blurHandler = function() {
+                var elapsed = Date.now() - startTime;
+                if (elapsed < 3000 && !callbackExecuted) {
+                    appOpened = true;
+                }
+            };
+            
+            window.addEventListener('blur', blurHandler);
+            
+            var hiddenHandler = function() {
+                var elapsed = Date.now() - startTime;
+                if (elapsed < 3000 && !callbackExecuted) {
+                    appOpened = true;
+                }
+            };
+            
+            document.addEventListener('visibilitychange', hiddenHandler);
+            
+            var iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.style.width = '1px';
+            iframe.style.height = '1px';
+            iframe.src = schemeUrl;
+            document.body.appendChild(iframe);
+            
+            setTimeout(function() {
+                iframe.parentNode && iframe.parentNode.removeChild(iframe);
+                window.removeEventListener('blur', blurHandler);
+                document.removeEventListener('visibilitychange', hiddenHandler);
+                
+                if (!callbackExecuted) {
+                    callbackExecuted = true;
+                    if (!appOpened) {
+                        fallbackCallback();
+                    }
+                }
+            }, timeout);
+        }
+        
         function generateClientLink(clientType) {
             var currentUrl = window.location.href;
             var subscriptionUrl = currentUrl + "/sub";
@@ -2030,21 +2158,79 @@ async function handleSubscriptionPage(request, user = null) {
             if (clientType === atob('djJyYXk=')) {
                 document.getElementById("clientSubscriptionUrl").textContent = subscriptionUrl;
                 document.getElementById("clientSubscriptionUrl").style.display = "block";
-                navigator.clipboard.writeText(subscriptionUrl).then(function() {
-                    alert(decodeURIComponent(escape(atob('VjJSYXkg6K6i6ZiF6ZO+5o6l5bey5aSN5Yi2'))));
+                
+                tryOpenApp('v2ray://install?url=' + encodeURIComponent(subscriptionUrl), function() {
+                    navigator.clipboard.writeText(subscriptionUrl).then(function() {
+                        alert(decodeURIComponent(escape(atob('VjJSYXkg6K6i6ZiF6ZO+5o6l5bey5aSN5Yi2'))));
+                    });
+                });
+            } else if (clientType === atob('c2hhZG93cm9ja2V0')) {
+                document.getElementById("clientSubscriptionUrl").textContent = subscriptionUrl;
+                document.getElementById("clientSubscriptionUrl").style.display = "block";
+                
+                tryOpenApp('shadowrocket://add/' + encodeURIComponent(subscriptionUrl), function() {
+                    navigator.clipboard.writeText(subscriptionUrl).then(function() {
+                        alert("小火箭订阅链接已复制");
+                    });
+                });
+            } else if (clientType === atob('djJyYXluZw==')) {
+                document.getElementById("clientSubscriptionUrl").textContent = subscriptionUrl;
+                document.getElementById("clientSubscriptionUrl").style.display = "block";
+                
+                tryOpenApp('v2rayng://install?url=' + encodeURIComponent(subscriptionUrl), function() {
+                    navigator.clipboard.writeText(subscriptionUrl).then(function() {
+                        alert("V2RayNG订阅链接已复制");
+                    });
                 });
             } else {
                 var encodedUrl = encodeURIComponent(subscriptionUrl);
                 var apiUrl = SUB_CONVERTER_URL + "?target=" + clientType + "&url=" + encodedUrl + "&insert=false";
                 document.getElementById("clientSubscriptionUrl").textContent = apiUrl;
                 document.getElementById("clientSubscriptionUrl").style.display = "block";
-                navigator.clipboard.writeText(apiUrl).then(function() {
-                    var displayName = clientType.toUpperCase();
-                    if (clientType === atob('c3VyZ2U=')) displayName = 'SURGE';
-                    if (clientType === atob('c2luZ2JveA==')) displayName = 'SING-BOX';
-                    if (clientType === atob('cXVhbng=')) displayName = 'QUANTUMULT X';
-                    alert(displayName + " 订阅链接已复制");
-                });
+                
+                var schemeUrl = '';
+                var displayName = clientType.toUpperCase();
+                
+                if (clientType === atob('Y2xhc2g=')) {
+                    schemeUrl = 'clash://install-config?url=' + encodeURIComponent(apiUrl);
+                    displayName = 'CLASH';
+                } else if (clientType === atob('c3VyZ2U=')) {
+                    schemeUrl = 'surge:///install-config?url=' + encodeURIComponent(apiUrl);
+                    displayName = 'SURGE';
+                } else if (clientType === atob('cXVhbng=')) {
+                    schemeUrl = 'quantumult-x://install-config?url=' + encodeURIComponent(apiUrl);
+                    displayName = 'QUANTUMULT X';
+                } else if (clientType === atob('bG9vbg==')) {
+                    schemeUrl = 'loon://install?url=' + encodeURIComponent(apiUrl);
+                    displayName = 'LOON';
+                } else if (clientType === atob('c2luZ2JveA==')) {
+                    schemeUrl = 'sing-box://install-config?url=' + encodeURIComponent(apiUrl);
+                    displayName = 'SING-BOX';
+                } else if (clientType === atob('c2hhZG93cm9ja2V0')) {
+                    schemeUrl = 'shadowrocket://add/' + encodeURIComponent(apiUrl);
+                    displayName = '小火箭';
+                } else if (clientType === atob('c3Rhc2g=')) {
+                    schemeUrl = 'stash://install?url=' + encodeURIComponent(apiUrl);
+                    displayName = 'STASH';
+                } else if (clientType === atob('bmVrb3JheQ==')) {
+                    schemeUrl = 'nekoray://install-config?url=' + encodeURIComponent(apiUrl);
+                    displayName = 'NEKORAY';
+                } else if (clientType === atob('djJyYXluZw==')) {
+                    schemeUrl = 'v2rayng://install?url=' + encodeURIComponent(apiUrl);
+                    displayName = 'V2RAYNG';
+                }
+                
+                if (schemeUrl) {
+                    tryOpenApp(schemeUrl, function() {
+                        navigator.clipboard.writeText(apiUrl).then(function() {
+                            alert(displayName + " 订阅链接已复制");
+                        });
+                    });
+                } else {
+                    navigator.clipboard.writeText(apiUrl).then(function() {
+                        alert(displayName + " 订阅链接已复制");
+                    });
+                }
             }
         }
         function getBase64Subscription() {
@@ -2058,8 +2244,12 @@ async function handleSubscriptionPage(request, user = null) {
                 .then(function(base64Content) {
                     document.getElementById("base64SubscriptionUrl").textContent = base64Content;
                     document.getElementById("base64SubscriptionUrl").style.display = "block";
-                    navigator.clipboard.writeText(base64Content).then(function() {
-                        alert("Base64订阅内容已复制");
+                    
+                    var schemeUrl = 'v2ray://install?content=' + encodeURIComponent(base64Content);
+                    tryOpenApp(schemeUrl, function() {
+                        navigator.clipboard.writeText(base64Content).then(function() {
+                            alert("Base64订阅内容已复制");
+                        });
                     });
                 })
                 .catch(function(error) {
@@ -3232,7 +3422,7 @@ function generateLinksFromNewIPs(list, user, workerDomain) {
         if (CF_HTTPS_PORTS.includes(port)) {
             
             const wsNodeName = `${nodeName}-${port}-WS-TLS`;
-            const link = `${proto}://${user}@${item.ip}:${port}?encryption=none&security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+            const link = `${proto}://${user}@${item.ip}:${port}?encryption=none&security=tls&sni=${workerDomain}&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
         } else if (CF_HTTP_PORTS.includes(port)) {
             
@@ -3244,7 +3434,7 @@ function generateLinksFromNewIPs(list, user, workerDomain) {
         } else {
             
             const wsNodeName = `${nodeName}-${port}-WS-TLS`;
-            const link = `${proto}://${user}@${item.ip}:${port}?encryption=none&security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+            const link = `${proto}://${user}@${item.ip}:${port}?encryption=none&security=tls&sni=${workerDomain}&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
         }
     });
@@ -3270,7 +3460,8 @@ function generateXhttpLinksFromSource(list, user, workerDomain) {
             type: 'xhttp',
             host: workerDomain,
             path: `/${nodePath}`,
-            mode: 'stream-one'
+            mode: 'stream-one',
+            alpn: 'h3,h2,http/1.1'
         });
         
         links.push(`vless://${user}@${safeIP}:${port}?${params.toString()}#${encodeURIComponent(wsNodeName)}`);
@@ -3296,7 +3487,7 @@ async function generateTrojanLinksFromNewIPs(list, user, workerDomain) {
         if (CF_HTTPS_PORTS.includes(port)) {
             
             const wsNodeName = `${nodeName}-${port}-${atob('VHJvamFu')}-WS-TLS`;
-            const link = `${atob('dHJvamFuOi8v')}${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+            const link = `${atob('dHJvamFuOi8v')}${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
         } else if (CF_HTTP_PORTS.includes(port)) {
             
@@ -3308,7 +3499,7 @@ async function generateTrojanLinksFromNewIPs(list, user, workerDomain) {
         } else {
             
             const wsNodeName = `${nodeName}-${port}-${atob('VHJvamFu')}-WS-TLS`;
-            const link = `${atob('dHJvamFuOi8v')}${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+            const link = `${atob('dHJvamFuOi8v')}${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&alpn=h3%2Ch2%2Chttp%2F1.1&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
             links.push(link);
         }
     });
