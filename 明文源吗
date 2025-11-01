@@ -1529,19 +1529,27 @@ async function connectStreams(remoteSocket, webSocket, headerData, retryFunc) {
 
 async function forwardUDP(udpChunk, webSocket, respHeader) {
 	try {
-		const tcpSocket = connect({ hostname: '8.8.4.4', port: 53 });
 		let header = respHeader;
-		const writer = tcpSocket.writable.getWriter();
-		await writer.write(udpChunk);
-		writer.releaseLock();
-		await tcpSocket.readable.pipeTo(new WritableStream({
-			async write(chunk) {
-				if (webSocket.readyState === 1) {
-					if (header) { webSocket.send(await new Blob([header, chunk]).arrayBuffer()); header = null; } 
-                    else { webSocket.send(chunk); }
-				}
+		const dohResponse = await fetch('https://dns.google/dns-query', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/dns-message',
+				'Accept': 'application/dns-message'
 			},
-		}));
+			body: udpChunk
+		});
+		
+		if (dohResponse.ok) {
+			const dnsResponse = await dohResponse.arrayBuffer();
+			if (webSocket.readyState === 1) {
+				if (header) { 
+					webSocket.send(await new Blob([header, new Uint8Array(dnsResponse)]).arrayBuffer()); 
+					header = null; 
+				} else { 
+					webSocket.send(new Uint8Array(dnsResponse)); 
+				}
+			}
+		}
 	} catch (error) { }
 }
 
